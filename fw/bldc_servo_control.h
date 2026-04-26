@@ -34,6 +34,30 @@
 
 namespace moteus {
 
+/// A simple first-order exponential low-pass filter.
+class ExponentialFilter {
+ public:
+  ExponentialFilter() {}
+
+  /// cutoff_hz - The rough bandwidth of the filter.  The actually 3dB
+  ///   cutoff frequency will be cutoff_hz / (2*pi).
+  ExponentialFilter(float rate_hz, float cutoff_hz)
+      : alpha_(cutoff_hz / rate_hz),
+        one_minus_alpha_(1.0f - alpha_) {}
+
+  void operator()(float input, float* filtered) {
+    if (!std::isfinite(*filtered)) {
+      *filtered = input;
+    } else {
+      *filtered = alpha_ * input + one_minus_alpha_ * *filtered;
+    }
+  }
+
+ private:
+  float alpha_ = 1.0f;
+  float one_minus_alpha_ = 0.0f;
+};
+
 inline float Limit(float a, float min, float max) MOTEUS_CCM_ATTRIBUTE;
 
 inline float Limit(float a, float min, float max) {
@@ -160,6 +184,20 @@ class BldcServoControl {
   using Control = BldcServoControl_Control;
   using CommandData = BldcServoCommandData;
 
+  // State pulled from BldcServoConfig or the motor struct by the
+  // Impl's config-update path.  Lives in the base because only
+  // BldcServoControl reads it; derived Impls (production and test
+  // fixtures) just write it during initialization / config changes.
+  float torque_constant_ = 0.0f;
+  float flux_brake_min_voltage_ = 0.0f;
+  float derate_temperature_ = 0.0f;
+  float motor_derate_temperature_ = 0.0f;
+
+  // ISR epoch counter — set by the Impl (or tests) and compared
+  // against position_.epoch inside the control loop to detect new
+  // position data.
+  uint8_t isr_motor_position_epoch_ = 0;
+
   BldcServoControl() {}
 
   /// Process a command, applying defaults and transforming positions.
@@ -266,20 +304,93 @@ class BldcServoControl {
     return self().motor_.Kv != 0.0f;
   }
 
+  void UpdateEffectiveInductance(float i_d_A) MOTEUS_CCM_ATTRIBUTE {
+    const float effective_L =
+        self().motor_.inductance_d_H +
+        self().motor_.inductance_d_scale * std::min(i_d_A, 0.0f);
+    self().status_.inductance_d_H = effective_L;
+    pid_d_config_.kp = pid_dq_w_ * effective_L;
+    // id_char = lambda_m / effective_L
+    // See also: mpat Motor.getCharacteristicCurrent()
+    self().status_.fw.id_char =
+        (effective_L > 0.0f && self().lambda_m_ > 0.0f) ?
+        self().lambda_m_ / effective_L :
+        0.0f;
+  }
+
+  void UpdateFieldWeakeningIdChar() {
+    const float L_at_max =
+        self().motor_.inductance_d_H +
+        self().motor_.inductance_d_scale * (-fw_max_current_A_);
+    fw_id_char_at_max_current_ =
+        (L_at_max > 0.0f && lambda_m_ > 0.0f) ?
+        lambda_m_ / L_at_max : 0.0f;
+  }
+
+  void UpdateDerivedMotorConstants() {
+    // 1 / sqrt(3) = 0.57735
+    v_per_hz_ = self().motor_.Kv == 0.0f ?
+        0.0f : 0.57735f * 60.0f / self().motor_.Kv;
+    // See also: mpat Motor.getLambdaM()
+    lambda_m_ = (v_per_hz_ > 0.0f && self().motor_.poles > 0) ?
+        v_per_hz_ / (kPi * self().motor_.poles) : 0.0f;
+
+    // Precomputed constants for the FW base velocity quadratic.  See
+    // ISR_CalculateDerivedQuantities.
+    v_per_hz_squared_ = v_per_hz_ * v_per_hz_;
+    pi_poles_Lq_ =
+        kPi * self().motor_.poles * self().motor_.inductance_q_H;
+    two_R_v_per_hz_ = 2.0f * self().motor_.resistance_ohm * v_per_hz_;
+    R_squared_ =
+        self().motor_.resistance_ohm * self().motor_.resistance_ohm;
+    fw_V_eff_factor_ =
+        self().rate_config_.max_voltage_ratio *
+        (1.0f - self().config_.fw.modulation_margin) * 0.5f;
+    half_max_voltage_ratio_over_v_per_hz_ =
+        (v_per_hz_ > 0.0f) ?
+        (self().rate_config_.max_voltage_ratio * 0.5f / v_per_hz_) :
+        0.0f;
+    max_V_factor_ =
+        self().rate_config_.max_voltage_ratio * kSvpwmRatio * 0.5f;
+    fw_max_current_A_ =
+        self().config_.fw.max_current_ratio * self().config_.max_current_A;
+    half_over_R_ = (self().motor_.resistance_ohm > 0.0f) ?
+        (0.5f / self().motor_.resistance_ohm) : 0.0f;
+    {
+      constexpr float kBoardVoltageMargin = 6.0f;
+      board_max_velocity_factor_ = (v_per_hz_ > 0.0f) ?
+          (0.5f * (self().config_.max_voltage - kBoardVoltageMargin) /
+           v_per_hz_) : 0.0f;
+    }
+    {
+      const auto* pos_config = self().motor_position_config();
+      const auto cs = pos_config->commutation_source;
+      const float cpr = static_cast<float>(pos_config->sources[cs].cpr);
+      commutation_inv_cpr_ = (cpr > 0.0f) ? (1.0f / cpr) : 0.0f;
+    }
+    // Cache a TorqueModel with precomputed reciprocals so the ISR
+    // can use multiplications instead of divisions.
+    torque_model_ = TorqueModel(
+        torque_constant_,
+        self().motor_.rotation_current_cutoff_A,
+        self().motor_.rotation_current_scale,
+        self().motor_.rotation_torque_scale);
+
+    pid_dq_w_ = k2Pi * self().config_.pid_dq_hz;
+    pid_d_config_.ki = pid_dq_w_ * self().motor_.resistance_ohm;
+    pid_d_config_.max_desired_rate = self().config_.max_current_desired_rate;
+    pid_q_config_.kp = pid_dq_w_ * self().motor_.inductance_q_H;
+    pid_q_config_.ki = pid_dq_w_ * self().motor_.resistance_ohm;
+    pid_q_config_.max_desired_rate = self().config_.max_current_desired_rate;
+    UpdateEffectiveInductance(0.0f);
+  }
+
   float current_to_torque(float current) const MOTEUS_CCM_ATTRIBUTE {
-    TorqueModel model(self().torque_constant_,
-                      self().motor_.rotation_current_cutoff_A,
-                      self().motor_.rotation_current_scale,
-                      self().motor_.rotation_torque_scale);
-    return model.current_to_torque(current);
+    return torque_model_.current_to_torque(current);
   }
 
   float torque_to_current(float torque) const MOTEUS_CCM_ATTRIBUTE {
-    TorqueModel model(self().torque_constant_,
-                      self().motor_.rotation_current_cutoff_A,
-                      self().motor_.rotation_current_scale,
-                      self().motor_.rotation_torque_scale);
-    return model.torque_to_current(torque);
+    return torque_model_.torque_to_current(torque);
   }
 
   bool current_control() const MOTEUS_CCM_ATTRIBUTE {
@@ -369,6 +480,10 @@ class BldcServoControl {
   SinCos ISR_CalculateDerivedQuantities(
       float cur_a, float cur_b, float cur_c,
       bool use_synthetic_theta) MOTEUS_CCM_ATTRIBUTE {
+    // Filter bus voltage (matches real firmware ADC filtering).
+    slow_bus_v_filter_(self().status_.bus_V, &self().status_.filt_bus_V);
+    fast_bus_v_filter_(self().status_.bus_V, &self().status_.filt_1ms_bus_V);
+
     // Compute electrical theta.
     const float electrical_theta = !use_synthetic_theta ?
         self().position_.electrical_theta :
@@ -376,7 +491,7 @@ class BldcServoControl {
             self().motor_position_config()->output.sign *
             MotorPosition::IntToFloat(*self().status_.control_position_raw) /
             self().motor_position_config()->rotor_to_output_ratio *
-            self().motor_.poles * 0.5f * kPi);
+            self().motor_.poles * 0.5f * k2Pi);
     self().status_.electrical_theta = electrical_theta;
 
     // Compute sin/cos for transforms.
@@ -392,30 +507,108 @@ class BldcServoControl {
     // Calculate output torque from q-axis current.
     const float rotor_to_output_ratio =
         self().motor_position_config()->rotor_to_output_ratio;
+    // Cache the reciprocal for reuse by later ISR stages.  This runs
+    // before ISR_DoControl so any downstream use sees a current value.
+    inv_rotor_to_output_ratio_ = (rotor_to_output_ratio != 0.0f) ?
+        (1.0f / rotor_to_output_ratio) : 0.0f;
     const bool is_torque_on = torque_on();
     self().status_.torque_Nm = is_torque_on ?
-        (current_to_torque(self().status_.q_A) / rotor_to_output_ratio) : 0.0f;
+        (current_to_torque(self().status_.q_A) *
+         inv_rotor_to_output_ratio_) : 0.0f;
     if (!is_torque_on) {
       self().status_.torque_error_Nm = 0.0f;
     }
 
     // Calculate maximum achievable motor velocity based on bus voltage.
-    //
-    // As of firmware ABI 0x010a moteus records motor Kv values that
-    // correspond roughly with open loop oscilloscope measurements and
-    // motor manufacturer's ratings.  They don't perfectly correspond
-    // to the speed that can actually be achieved under control.  For
-    // stable control loops, we need to limit the maximum controlled
-    // velocity to be a modest amount under what is actually capable,
-    // which tends to be around 90% of the speed expected based on
-    // input voltage, Kv, and modulation depth alone.
-    constexpr float kVelocityMargin = 0.87f;
 
-    self().status_.motor_max_velocity =
-        rotor_to_output_ratio *
-        self().rate_config_.max_voltage_ratio *
-        kVelocityMargin * 0.5f * self().status_.filt_1ms_bus_V /
-        self().v_per_hz_;
+    const float unfiltered_base_velocity = [&]() {
+      if (self().config_.fw.enable && self().v_per_hz_ > 0.0f) {
+        // Current-dependent base speed for MTPA on SPMSM (Ld ≈ Lq).
+        // With id = 0 below base speed, the voltage magnitude is:
+        //   V² = (R·iq + vel·v_per_hz)² + (π·poles·L·vel·iq)²
+        // Solving for vel gives a quadratic: a·vel² + b·vel + c = 0.
+        //
+        // The sign of iq matters: when regenerating (iq < 0), the
+        // resistive drop opposes back-EMF, raising the base velocity.
+        //
+        // Base velocity includes target_modulation (1 - modulation_margin)
+        // for field weakening q-axis voltage headroom. This ensures that
+        // id = 0 exactly at base_velocity with no discontinuity.
+        // Note: no kSvpwmRatio here to match the non-FW path formula.
+        const float V_eff =
+            self().fw_V_eff_factor_ * self().status_.filt_bus_V;
+        const float iq = self().status_.q_A;
+        const float omega_L_iq = self().pi_poles_Lq_ * iq;
+        const float qa = self().v_per_hz_squared_ + omega_L_iq * omega_L_iq;
+        const float qb = self().two_R_v_per_hz_ * iq;
+        const float qc =
+            self().R_squared_ * iq * iq - V_eff * V_eff;
+        const float disc = qb * qb - 4.0f * qa * qc;
+        if (disc >= 0.0f && qa > 0.0f) {
+          const float vel_rotor_hz =
+              (-qb + std::sqrt(disc)) / (2.0f * qa);
+          return std::max(0.0f, vel_rotor_hz * rotor_to_output_ratio);
+        } else {
+          return 0.0f;
+        }
+      } else {
+        return rotor_to_output_ratio *
+            self().half_max_voltage_ratio_over_v_per_hz_ *
+            self().status_.filt_bus_V;
+      }
+    }();
+    base_velocity_filter_(
+        unfiltered_base_velocity, &self().status_.motor_base_velocity);
+
+    // Calculate motor_max_velocity based on field weakening state.
+    //
+    // Uses the previous cycle's effective_max_current_A (set by
+    // ISR_DoCurrentControl) which already accounts for all sources
+    // of current derating (temperature, etc.).
+    const float max_velocity = [&]() {
+      if (!self().config_.fw.enable ||
+          fw_id_char_at_max_current_ <= 0.0f) {
+        return self().status_.motor_base_velocity;
+      }
+      // CPSR (Constant Power Speed Ratio):
+      // At max speed, id = -Imax = -id_char × (1 - 1 / speed_ratio)
+      // Solving: speed_ratio_max = 1 / (1 - Imax/id_char)
+      // So: max_velocity = base_velocity / (1 - id_ratio)
+      // Note: target_modulation is already incorporated in base_velocity.
+
+      // effective_max_current_A is already <= max_current_A by
+      // construction in ISR_DoCurrentControl, so no need to re-min.
+      const float fw_max_A =
+          self().status_.effective_max_current_A *
+          self().config_.fw.max_current_ratio;
+
+      // Compute id_char at the effective max FW current (inductance
+      // varies with current due to saturation).
+      const float L_at_fw_max =
+          self().motor_.inductance_d_H +
+          self().motor_.inductance_d_scale * (-fw_max_A);
+      const float id_char_at_fw_max =
+          (L_at_fw_max > 0.0f && self().lambda_m_ > 0.0f) ?
+          self().lambda_m_ / L_at_fw_max :
+          0.0f;
+      if (id_char_at_fw_max <= 0.0f) {
+        return self().status_.motor_base_velocity;
+      }
+
+      constexpr float kMaxCpsr = 3.0f;
+      const float Imax = std::min(
+          self().half_over_R_ * self().status_.filt_bus_V,
+          fw_max_A);
+      const float id_ratio = Imax / id_char_at_fw_max;
+      const float cpsr = (id_ratio >= 1.0f) ? kMaxCpsr :
+          std::min(kMaxCpsr, 1.0f / (1.0f - id_ratio));
+      const float cpsr_velocity = cpsr * self().status_.motor_base_velocity;
+
+      const float board_max_velocity =
+          self().board_max_velocity_factor_ * rotor_to_output_ratio;
+      return std::min(cpsr_velocity, board_max_velocity);
+    }();
+    max_velocity_filter_(max_velocity, &self().status_.motor_max_velocity);
 
     return sin_cos;
   }
@@ -504,11 +697,15 @@ class BldcServoControl {
 
   /// Assume that the voltages are intended to be balanced around the
   /// midpoint and can be shifted accordingly.
+  __attribute__((always_inline))
   void ISR_DoBalancedVoltageControl(const Vec3& voltage) MOTEUS_CCM_ATTRIBUTE {
     self().control_.voltage = voltage;
 
-    const float bus_V = self().status_.filt_bus_V;
-    const Vec3 pwm_in = {voltage.a / bus_V, voltage.b / bus_V, voltage.c / bus_V};
+    const float inv_bus_V = 1.0f / self().status_.filt_bus_V;
+    const Vec3 pwm_in = {
+        voltage.a * inv_bus_V,
+        voltage.b * inv_bus_V,
+        voltage.c * inv_bus_V};
 
     const float pwmmin = std::min(pwm_in.a, std::min(pwm_in.b, pwm_in.c));
     const float pwmmax = std::max(pwm_in.a, std::max(pwm_in.b, pwm_in.c));
@@ -523,7 +720,7 @@ class BldcServoControl {
 
   Vec3 ISR_CalculatePhaseVoltage(const SinCos& sin_cos,
                                  float d_V, float q_V) MOTEUS_CCM_ATTRIBUTE {
-    if (self().position_.epoch != self().isr_motor_position_epoch_) {
+    if (self().position_.epoch != isr_motor_position_epoch_) {
       self().status_.mode = kFault;
       self().status_.fault = errc::kConfigChanged;
 
@@ -559,9 +756,7 @@ class BldcServoControl {
       return;
     }
 
-    const float max_V =
-        self().rate_config_.max_voltage_ratio * kSvpwmRatio *
-        0.5f * self().status_.filt_bus_V;
+    const float max_V = self().max_V_factor_ * self().status_.filt_bus_V;
 
     ISR_DoBalancedVoltageControl(
         ISR_CalculatePhaseVoltage(
@@ -632,7 +827,7 @@ class BldcServoControl {
     };
 
     float derate_fraction =
-        (self().status_.filt_fet_temp_C - self().derate_temperature_) /
+        (self().status_.filt_fet_temp_C - derate_temperature_) /
         self().config_.temperature_margin;
     errc derate_fault = errc::kLimitMaxCurrent;
     if (derate_fraction > 0.0f) {
@@ -640,7 +835,7 @@ class BldcServoControl {
     }
     if (std::isfinite(self().config_.motor_fault_temperature)) {
       const float motor_derate =
-          ((self().status_.filt_motor_temp_C - self().motor_derate_temperature_) /
+          ((self().status_.filt_motor_temp_C - motor_derate_temperature_) /
            self().config_.motor_temperature_margin);
       if (motor_derate > derate_fraction) {
         derate_fraction = motor_derate;
@@ -657,10 +852,68 @@ class BldcServoControl {
 
     const float temp_limit_A = std::min<float>(
         self().config_.max_current_A, derate_current_A);
+    self().status_.effective_max_current_A = temp_limit_A;
 
     auto limit_either_current = [&](std::pair<float, errc> in_pair) MOTEUS_CCM_ATTRIBUTE {
       return LimitCode(in_pair.first, -temp_limit_A, temp_limit_A, derate_fault, in_pair.second);
     };
+
+    // Calculate the field weakening D axis current if enabled.
+    //
+    // We use a Constant Voltage Constant Power (CVCP) method with a
+    // low-pass filter on the output to prevent oscillation at the
+    // base velocity boundary.
+    const auto [i_d_fw, fw_errc_val] = [&]() -> std::pair<float, errc> {
+      // The exponential filter only asymptotically approaches zero, so
+      // snap any sub-milliamp residual to exactly 0.  Otherwise a
+      // lingering ~1e-30 value would keep kLimitFieldWeakening set
+      // long after the motor has stopped.
+      constexpr float kIdDeadband = 1e-3f;
+
+      if (!self().config_.fw.enable) {
+        // Feed 0 through the filter for smooth decay when FW is disabled.
+        fw_id_filter_(0.0f, &self().status_.fw.id_A);
+        self().status_.fw.id_A =
+            Threshold(self().status_.fw.id_A, -kIdDeadband, kIdDeadband);
+        return {self().status_.fw.id_A, errc::kSuccess};
+      }
+
+      const float abs_max_current =
+          self().config_.fw.max_current_ratio *
+          self().status_.effective_max_current_A;
+
+      const float base_speed = self().status_.motor_base_velocity;
+
+      // We use control_velocity rather than the measured speed by
+      // default, as it eliminates one possible source of feedback
+      // instability.
+      const float velocity_for_fw =
+          self().status_.control_velocity.value_or(self().position_.velocity);
+      const float current_speed = std::abs(velocity_for_fw);
+
+      // CVCP: id = -id_char * (1 - 1/speed_ratio)
+      //         = -id_char * (current_speed - base_speed) / current_speed
+      //
+      // Note: target_modulation is incorporated in base_velocity, so
+      // the formula simplifies to this form.  At current_speed =
+      // base_speed, id = 0 with no discontinuity.
+      const float id_cvcp = (current_speed > base_speed) ?
+          -self().status_.fw.id_char *
+          (current_speed - base_speed) / current_speed : 0.0f;
+      const float id_raw = Limit(id_cvcp, -abs_max_current, 0.0f);
+
+      // Low-pass filter the id command to prevent oscillation at
+      // the base velocity boundary.
+      fw_id_filter_(id_raw, &self().status_.fw.id_A);
+      self().status_.fw.id_A =
+          Threshold(self().status_.fw.id_A, -kIdDeadband, kIdDeadband);
+
+      const float result = self().status_.fw.id_A;
+      return {
+        result,
+        result != 0.0f ? errc::kLimitFieldWeakening : errc::kSuccess
+      };
+    }();
 
     const auto almost_i_q_A_pair =
         limit_either_current(
@@ -668,7 +921,7 @@ class BldcServoControl {
                 limit_q_current(
                     std::make_pair(i_q_A_in, errc::kSuccess))));
     const auto almost_i_d_A_pair = limit_either_current(
-        std::make_pair(i_d_A_in, errc::kSuccess));
+        std::make_pair(i_d_A_in + i_d_fw, fw_errc_val));
 
     const auto almost_i_q_A = almost_i_q_A_pair.first;
     const auto almost_i_d_A = almost_i_d_A_pair.first;
@@ -677,8 +930,8 @@ class BldcServoControl {
         almost_i_d_A_pair.second : almost_i_q_A_pair.second;
 
     // Apply our power limits by limiting the maximum current command.
-    const float used_d_power_W = 1.5f * self().old_d_V_ * almost_i_d_A;
-    const float used_q_power_W = 1.5f * self().old_q_V_ * almost_i_q_A;
+    const float used_d_power_W = 1.5f * old_d_V_ * almost_i_d_A;
+    const float used_q_power_W = 1.5f * old_q_V_ * almost_i_q_A;
     const float used_power = used_q_power_W + used_d_power_W;
 
     const auto [i_d_A, i_q_A, limit_code] = [&]() {
@@ -700,9 +953,9 @@ class BldcServoControl {
     self().control_.i_d_A = i_d_A;
     self().control_.i_q_A = i_q_A;
 
-    const float max_V =
-        self().rate_config_.max_voltage_ratio * kSvpwmRatio *
-        0.5f * self().status_.filt_bus_V;
+    UpdateEffectiveInductance(i_d_A);
+
+    const float max_V = self().max_V_factor_ * self().status_.filt_bus_V;
 
     const auto limit_to_max_voltage = [max_V](float denorm_d_V, float denorm_q_V, errc inlimit) {
       const float max_V_sq = max_V * max_V;
@@ -720,13 +973,37 @@ class BldcServoControl {
     };
 
     if (!self().config_.voltage_mode_control) {
+      // Use the control velocity for improved stability.
+      const float control_velocity_rotor =
+          self().status_.control_velocity.value_or(
+              self().position_.velocity) *
+          self().inv_rotor_to_output_ratio_;
+      const float omega_electrical =
+          control_velocity_rotor * k2Pi * (self().motor_.poles * 0.5f);
+
+      // Cross-coupling feedforward using the commanded currents.  The
+      // measured currents include the sensor noise floor which, after
+      // multiplication by ω_e×L, injects that noise directly into the
+      // voltage command at high speed.  Commanded currents also avoid
+      // the unit-delay algebraic loop between the PID output and the
+      // current it commands back through the cross-coupling term.
+      const float cross_coupling_d_ff =
+          -omega_electrical * self().motor_.inductance_q_H * i_q_A *
+          self().config_.cross_coupling_feedforward;
+
       const float denorm_d_V =
           self().pid_d_.Apply(self().status_.d_A, i_d_A, self().rate_config_.period_s) +
-          i_d_A * self().config_.current_feedforward * self().motor_.resistance_ohm;
+          i_d_A * self().config_.current_feedforward * self().motor_.resistance_ohm +
+          cross_coupling_d_ff;
+
+      const float cross_coupling_q_ff =
+          omega_electrical * self().status_.inductance_d_H * i_d_A *
+          self().config_.cross_coupling_feedforward;
 
       const float denorm_q_V =
           self().pid_q_.Apply(self().status_.q_A, i_q_A, self().rate_config_.period_s) +
           i_q_A * self().config_.current_feedforward * self().motor_.resistance_ohm +
+          cross_coupling_q_ff +
           (feedforward_velocity_rotor *
            self().config_.bemf_feedforward *
            self().v_per_hz_);
@@ -738,10 +1015,29 @@ class BldcServoControl {
         self().status_.fault = final_limit_code;
       }
 
-      // We also limit the integral to be no more than the maximal
-      // applied voltage for each phase independently.  This helps to
-      // more quickly recover if things saturate in the case of no or
-      // incomplete feedforward terms.
+      // Back-calculation anti-windup.
+      const float d_feedforward =
+          i_d_A * self().config_.current_feedforward * self().motor_.resistance_ohm +
+          cross_coupling_d_ff;
+      const float q_feedforward =
+          i_q_A * self().config_.current_feedforward * self().motor_.resistance_ohm +
+          cross_coupling_q_ff +
+          (feedforward_velocity_rotor *
+           self().config_.bemf_feedforward *
+           self().v_per_hz_);
+
+      if (d_V != denorm_d_V) {
+        const float target_pid_d = d_V - d_feedforward;
+        self().status_.pid_d.integral =
+            -target_pid_d - pid_d_config_.kp * self().status_.pid_d.error;
+      }
+
+      if (q_V != denorm_q_V) {
+        const float target_pid_q = q_V - q_feedforward;
+        self().status_.pid_q.integral =
+            -target_pid_q - pid_q_config_.kp * self().status_.pid_q.error;
+      }
+
       self().status_.pid_d.integral = Limit(
           self().status_.pid_d.integral,
           -max_V, max_V);
@@ -922,10 +1218,9 @@ class BldcServoControl {
     {
       const auto* pos_config = self().motor_position_config();
       const auto commutation_source = pos_config->commutation_source;
-      const float cpr = static_cast<float>(
-          pos_config->sources[commutation_source].cpr);
       const float commutation_position =
-          self().position_.sources[commutation_source].filtered_value / cpr;
+          self().position_.sources[commutation_source].filtered_value *
+          self().commutation_inv_cpr_;
 
       auto sample =
           [&](const auto& table, float scale) {
@@ -955,16 +1250,60 @@ class BldcServoControl {
         compensated_q_A :
         Limit(compensated_q_A, -kMaxUnconfiguredCurrent, kMaxUnconfiguredCurrent);
 
-    const float d_A = [&]() MOTEUS_CCM_ATTRIBUTE {
+    // Pre-emptive regen d-axis injection.
+    //
+    // When regenerating and the estimated regen power exceeds
+    // max_regen_power_W, inject d-axis current to dissipate the
+    // excess as I^2*R in the windings.  This acts before bus voltage
+    // rises, unlike voltage-feedback flux braking.
+    const float preemptive_d_A = [&]() MOTEUS_CCM_ATTRIBUTE {
+      if (!std::isfinite(self().config_.max_regen_power_W)) {
+        return 0.0f;
+      }
+
+      const float velocity = self().position_.velocity;
+      // Only active during regeneration (braking opposes motion).
+      if (velocity * q_A >= 0.0f) { return 0.0f; }
+
+      // P_regen = |q_A| * Kt * |ω_rotor|
+      // velocity is in output frame; convert to rotor frame.
+      // (Kt already includes the 3/2 factor for 3-phase torque.)
+      const float rotor_velocity =
+          velocity * self().inv_rotor_to_output_ratio_;
+      const float regen_power =
+          std::abs(q_A) * torque_constant_ *
+          std::abs(rotor_velocity) * k2Pi;
+
+      const float excess =
+          regen_power - self().config_.max_regen_power_W;
+      if (excess <= 0.0f) { return 0.0f; }
+
+      // P_dissipated = 1.5 * d² * R  →  d = sqrt(P / (1.5 * R))
+      return -std::sqrt(
+          excess / (1.5f * self().motor_.resistance_ohm));
+    }();
+
+    // Voltage-feedback flux braking
+    //
+    // Alway use negative d-axis current.  The I^2*R dissipation is
+    // the same regardless of sign, but negative d_A weakens the field
+    // rather than strengthening it, which avoids consuming voltage
+    // headroom at any speed and composes naturally with field
+    // weakening.  Both are negative, and there is no discontinuity at
+    // the base-speed crossing.
+    const float fb_d_A = [&]() MOTEUS_CCM_ATTRIBUTE {
       const auto error = (
-          self().status_.filt_1ms_bus_V - self().flux_brake_min_voltage_);
+          self().status_.filt_1ms_bus_V - flux_brake_min_voltage_);
 
       if (error <= 0.0f) {
         return 0.0f;
       }
 
-      return (error / self().config_.flux_brake_resistance_ohm);
+      return -(error / self().config_.flux_brake_resistance_ohm);
     }();
+
+    // Use whichever is more negative (stronger).
+    const float d_A = std::min(preemptive_d_A, fb_d_A);
 
     if (d_A != 0.0f) {
       self().status_.fault = errc::kLimitFluxBraking;
@@ -972,7 +1311,7 @@ class BldcServoControl {
 
     ISR_DoCurrent(
         sin_cos, d_A, q_A,
-        velocity_command / self().motor_position_config()->rotor_to_output_ratio,
+        velocity_command * self().inv_rotor_to_output_ratio_,
         data->ignore_position_bounds);
   }
 
@@ -1050,6 +1389,7 @@ class BldcServoControl {
     self().DoHardStop();
 
     self().status_.power_W = 0.0f;
+    self().status_.fw.id_A = 0.0f;
   }
 
   void ISR_DoPositionTimeout(const SinCos& sin_cos,
@@ -1097,23 +1437,38 @@ class BldcServoControl {
     const float max_V = (0.5f - self().rate_config_.min_pwm) *
         self().status_.filt_bus_V * kSvpwmRatio;
 
-    const float d_V =
-        Limit(
-            offset +
-            data->d_V * (self().status_.meas_ind_phase > 0 ? 1.0f : -1.0f),
-            -max_V,
-            max_V);
+    const float excitation =
+        data->d_V * (self().status_.meas_ind_phase > 0 ? 1.0f : -1.0f);
 
-    self().status_.meas_ind_integrator +=
-        (self().status_.d_A - self().status_.meas_ind_old_d_A) *
-        old_sign_float;
-    self().status_.meas_ind_old_d_A = self().status_.d_A;
+    if (data->meas_ind_axis == 0) {
+      // D-axis excitation (default behavior).
+      const float d_V = Limit(offset + excitation, -max_V, max_V);
 
-    ISR_DoBalancedVoltageControl(ISR_CalculatePhaseVoltage(sin_cos, d_V, 0.0f));
+      self().status_.meas_ind_integrator +=
+          (self().status_.d_A - self().status_.meas_ind_old_d_A) *
+          old_sign_float;
+      self().status_.meas_ind_old_d_A = self().status_.d_A;
+
+      ISR_DoBalancedVoltageControl(
+          ISR_CalculatePhaseVoltage(sin_cos, d_V, 0.0f));
+    } else {
+      // Q-axis excitation: apply excitation on q-axis, keep d-axis
+      // offset to hold rotor position.
+      const float d_V = Limit(offset, -max_V, max_V);
+      const float q_V = Limit(excitation, -max_V, max_V);
+
+      self().status_.meas_ind_integrator +=
+          (self().status_.q_A - self().status_.meas_ind_old_q_A) *
+          old_sign_float;
+      self().status_.meas_ind_old_q_A = self().status_.q_A;
+
+      ISR_DoBalancedVoltageControl(
+          ISR_CalculatePhaseVoltage(sin_cos, d_V, q_V));
+    }
   }
 
   void ISR_StartCalibrating() MOTEUS_CCM_ATTRIBUTE {
-    self().isr_motor_position_epoch_ = self().position_.epoch;
+    isr_motor_position_epoch_ = self().position_.epoch;
     self().status_.mode = kEnabling;
     self().StartCalibrating();
   }
@@ -1167,7 +1522,7 @@ class BldcServoControl {
             // pre-startup calibration phase, we are not yet actively
             // controlling.  Thus any epoch changes that happen before
             // then are "not our problem".
-            self().isr_motor_position_epoch_ = self().position_.epoch;
+            isr_motor_position_epoch_ = self().position_.epoch;
             [[fallthrough]];
           }
           case kPwm:
@@ -1200,6 +1555,7 @@ class BldcServoControl {
               self().status_.meas_ind_phase = 0;
               self().status_.meas_ind_integrator = 0.0f;
               self().status_.meas_ind_old_d_A = self().status_.d_A;
+              self().status_.meas_ind_old_q_A = self().status_.q_A;
             }
 
             return;
@@ -1214,8 +1570,8 @@ class BldcServoControl {
 
   void ISR_DoControl(const SinCos& sin_cos,
                      CommandData* data) MOTEUS_CCM_ATTRIBUTE {
-    self().old_d_V_ = self().control_.d_V;
-    self().old_q_V_ = self().control_.q_V;
+    old_d_V_ = self().control_.d_V;
+    old_q_V_ = self().control_.q_V;
 
     self().control_.Clear();
 
@@ -1342,6 +1698,59 @@ class BldcServoControl {
  protected:
   Impl& self() { return static_cast<Impl&>(*this); }
   const Impl& self() const { return static_cast<const Impl&>(*this); }
+
+  void InitControlFilters(float pwm_rate_hz) {
+    max_velocity_filter_ = ExponentialFilter(pwm_rate_hz, 10.0f);
+    base_velocity_filter_ = ExponentialFilter(pwm_rate_hz, 5.0f);
+    fw_id_filter_ = ExponentialFilter(
+        pwm_rate_hz, self().config_.fw.bandwidth_hz);
+    slow_bus_v_filter_ = ExponentialFilter(pwm_rate_hz, 2.0f);
+    fast_bus_v_filter_ = ExponentialFilter(pwm_rate_hz, 1000.0f);
+  }
+
+  float v_per_hz_ = 0.0f;
+  float lambda_m_ = 0.0f;
+
+  // Precomputed constants used by the FW base velocity quadratic in
+  // ISR_CalculateDerivedQuantities.
+  float v_per_hz_squared_ = 0.0f;           // v_per_hz^2
+  float pi_poles_Lq_ = 0.0f;                // kPi * poles * inductance_q_H
+  float two_R_v_per_hz_ = 0.0f;             // 2 * R * v_per_hz
+  float R_squared_ = 0.0f;                  // R^2
+  float fw_V_eff_factor_ = 0.0f;            // max_voltage_ratio * target_modulation * 0.5
+  float half_max_voltage_ratio_over_v_per_hz_ = 0.0f;  // max_voltage_ratio * 0.5 / v_per_hz
+  float max_V_factor_ = 0.0f;               // max_voltage_ratio * kSvpwmRatio * 0.5 (multiplied by filt_bus_V for max_V)
+  float fw_max_current_A_ = 0.0f;           // fw.max_current_ratio * max_current_A
+  float fw_id_char_at_max_current_ = 0.0f;  // lambda_m / L_d(-fw_max_current_A_)
+  float half_over_R_ = 0.0f;                // 0.5 / resistance_ohm (multiplied by filt_bus_V for Imax voltage limit)
+  float board_max_velocity_factor_ = 0.0f;  // 0.5 * (max_voltage - kBoardVoltageMargin) / v_per_hz (multiplied by rotor_to_output_ratio for board_max_velocity)
+  float commutation_inv_cpr_ = 0.0f;        // 1 / commutation source cpr (avoids u32->float convert and divide every ISR)
+  // Cached torque model — reconstructed in UpdateDerivedMotorConstants
+  // so the per-call setup (including reciprocals) stays out of the
+  // ISR hot path.
+  TorqueModel torque_model_;
+
+  // 1 / rotor_to_output_ratio — computed once per ISR in
+  // ISR_CalculateDerivedQuantities and reused by later stages that
+  // would otherwise divide by rotor_to_output_ratio repeatedly.
+  // Not precomputed at config time because motor_position config
+  // changes do not trigger UpdateDerivedMotorConstants.
+  float inv_rotor_to_output_ratio_ = 0.0f;
+
+  SimplePI::Config pid_d_config_;
+  SimplePI::Config pid_q_config_;
+  float pid_dq_w_ = 0.0f;
+
+  ExponentialFilter max_velocity_filter_;
+  ExponentialFilter base_velocity_filter_;
+  ExponentialFilter fw_id_filter_;
+  ExponentialFilter slow_bus_v_filter_;
+  ExponentialFilter fast_bus_v_filter_;
+
+  // Previous ISR's applied d/q voltages, used for the power
+  // accounting that runs one step behind the current command.
+  float old_d_V_ = 0.0f;
+  float old_q_V_ = 0.0f;
 };
 
 }  // namespace moteus
