@@ -208,9 +208,8 @@ void AutoCalibrator::PollMillisecond() {
     }
 
     case kComputePid: {
-      const float w_3db = config_.pid_bw_hz * 2.0f * kPi;
-      bldc_->config()->pid_dq.kp = w_3db * status_.inductance_H;
-      bldc_->config()->pid_dq.ki = w_3db * status_.resistance_ohm;
+      bldc_->config()->pid_dq_hz = config_.pid_bw_hz;
+      bldc_->ApplyConfig();
       SetState(kEncoderPhaseUp);
       break;
     }
