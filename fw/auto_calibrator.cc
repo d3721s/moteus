@@ -33,6 +33,14 @@ float WrapBalanced(float value) {
   return value > 0.5f ? value - 1.0f : value;
 }
 
+template <typename T>
+auto WritePersistentConfig(T* config, int) -> decltype(config->Write(), void()) {
+  config->Write();
+}
+
+template <typename T>
+void WritePersistentConfig(T*, long) {}
+
 }
 
 AutoCalibrator::AutoCalibrator(
@@ -281,7 +289,7 @@ void AutoCalibrator::PollMillisecond() {
     case kWriteConfig:
       CommandStop();
       if (config_.write_config) {
-        persistent_config_->Write();
+        WritePersistentConfig(persistent_config_, 0);
       }
       SetState(kComplete);
       break;

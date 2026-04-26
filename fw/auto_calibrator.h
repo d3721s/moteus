@@ -53,7 +53,7 @@ class AutoCalibrator {
   };
 
   struct Status {
-    AutoCalState state = kIdle;
+    uint8_t state = kIdle;
     uint32_t state_ms = 0;
     uint16_t sample_count = 0;
     float resistance_ohm = 0.0f;
