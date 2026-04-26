@@ -450,7 +450,7 @@ private:
 
     const auto &s = bldc_servo_->status();
     const auto &mp = bldc_servo_->motor_position();
-
+    #warning "单位需确定"
     // velocity: rev/s × 100 → int16
     const int16_t vel_i16 = static_cast<int16_t>(s.velocity * 100.0f);
     // position: rev × 100 → int16
@@ -492,6 +492,7 @@ private:
               16, reply);
     return true;
   }
+
   bool HandleGetValue2(int dlc, const char *data) { return true; }
   bool HandleSetConfig(int dlc, const char *data) { return false; }
   bool HandleGetConfig(int dlc, const char *data) { return false; }
