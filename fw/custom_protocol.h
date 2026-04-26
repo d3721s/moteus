@@ -9,7 +9,7 @@
 #include "fw/fdcan.h"
 #include "mjlib/micro/command_manager.h"
 #include "mjlib/multiplex/micro_server.h"
-
+#include "fw/moteus_hw.h"
 // using mjlib::micro::CommandManager;
 
 namespace moteus {
@@ -427,10 +427,10 @@ private:
 
   bool HandleGetFwVersion(int dlc, const char *data) {
     char reply[8] = {0};
-    reply[4] = FwVersionMinor & 0xFF;
-    reply[5] = (FwVersionMinor >> 8) & 0xFF;
-    reply[6] = (FwVersionMinor >> 16) & 0xFF;
-    reply[7] = (FwVersionMinor >> 24) & 0xFF;
+    reply[4] = MOTEUS_FIRMWARE_VERSION & 0xFF;
+    reply[5] = (MOTEUS_FIRMWARE_VERSION >> 8) & 0xFF;
+    reply[6] = (MOTEUS_FIRMWARE_VERSION >> 16) & 0xFF;
+    reply[7] = (MOTEUS_FIRMWARE_VERSION >> 24) & 0xFF;
 
     SendFrame(Send << DirOffset |
                   (multiplex_protocol_->config()->id << NodeOffset) |
