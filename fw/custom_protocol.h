@@ -507,7 +507,15 @@ private:
   bool HandleSaveAllConfig(int dlc, const char *data) { return false; }
   bool HandleResetAllConfig(int dlc, const char *data) { return false; }
   bool HandleHeartbeat(int dlc, const char *data) { return false; }
-  bool HandleStartAuto(int dlc, const char *data) { return false; }
+  bool HandleStartAuto(int dlc, const char *data) {
+    auto_value_1_enabled_ = (data[0] == 1);
+
+    SendFrame(Send << DirOffset |
+                  (multiplex_protocol_->config()->id << NodeOffset) |
+                  CAN_CMD_START_AUTO,
+              1, data);
+    return true;
+  }
   bool HandleDfuStart(int dlc, const char *data) { return false; }
   bool HandleDfuData(int dlc, const char *data) { return false; }
   bool HandleDfuEnd(int dlc, const char *data) { return false; }
@@ -563,6 +571,8 @@ private:
 
   uint32_t status_;
   uint32_t errors_;
+
+  bool auto_value_1_enabled_ = false;
 
   // 速度                bldc_servo_->status().velocity
   // 位置                bldc_servo_->status().position
