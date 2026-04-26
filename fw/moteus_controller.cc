@@ -17,7 +17,6 @@
 #include "mjlib/base/limit.h"
 
 #include "fw/aux_port.h"
-#include "fw/auto_calibrator.h"
 #include "fw/drv8323.h"
 #include "fw/math.h"
 #include "fw/moteus_hw.h"
@@ -542,7 +541,6 @@ class MoteusController::Impl : public multiplex::MicroServer::Server {
 
             return options;
           }()),
-        auto_calibrator_(persistent_config, telemetry_manager, &bldc_),
         clock_manager_(clock_manager),
         system_info_(system_info),
         firmware_(firmware),
@@ -585,7 +583,6 @@ class MoteusController::Impl : public multiplex::MicroServer::Server {
     drv8323_.PollMillisecond();
     bldc_.PollMillisecond();
     motor_position_.PollMillisecond();
-    auto_calibrator_.PollMillisecond();
   }
 
   void StartFrame() override {
@@ -1274,7 +1271,6 @@ class MoteusController::Impl : public multiplex::MicroServer::Server {
   MotorPosition motor_position_;
   Drv8323 drv8323_;
   BldcServo bldc_;
-  AutoCalibrator auto_calibrator_;
   ClockManager* const clock_manager_;
   SystemInfo* const system_info_;
   FirmwareInfo* const firmware_;
