@@ -28,6 +28,14 @@ public:
                                                                data);
   }
 
+  void PollMillisecond() {
+    if (!auto_value_1_enabled_) {
+      return;
+    }
+
+    HandleGetValue1(0, nullptr);
+  }
+
 private:
   static constexpr int8_t DlcAny = -1;
   static constexpr int8_t DlcNotUsed = -2;
