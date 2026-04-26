@@ -95,6 +95,7 @@ class BldcServo {
 
   const Status& status() const;
   const Config& config() const;
+  const Motor& motor() const;
   const Control& control() const;
   const AuxPort::Status& aux1() const;
   const AuxPort::Status& aux2() const;

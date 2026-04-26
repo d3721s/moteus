@@ -1,12 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <cmath>
 #include <limits>
 #include <mbed.h>
 
 #include "fw/bldc_servo.h"
 #include "fw/error.h"
 #include "fw/fdcan.h"
+#include "fw/math.h"
 #include "fw/moteus_hw.h"
 #include "mjlib/micro/command_manager.h"
 #include "mjlib/multiplex/micro_server.h"
@@ -26,6 +28,52 @@ public:
                                  void *context) {
     return static_cast<CustomProtocol *>(context)->HandleFrame(can_id, dlc,
                                                                data);
+  }
+
+  void Init() {
+    if (bldc_servo_ == nullptr || multiplex_protocol_ == nullptr) {
+      return;
+    }
+
+    const auto &servo_config = bldc_servo_->config();
+    const auto &motor = bldc_servo_->motor();
+    const auto *position_config = bldc_servo_->motor_position_config();
+
+    config_.invert_motor_dir = motor.phase_invert;
+    config_.inertia = servo_config.inertia_feedforward;
+    config_.torque_constant = motor.Kv == 0.0f ? 0.1f :
+        ((3.0f / 2.0f) * (1.0f / kSqrt3) * (60.0f / k2Pi)) / motor.Kv;
+    config_.motor_pole_pairs = motor.poles / 2;
+    config_.motor_phase_resistance = motor.resistance_ohm;
+    config_.motor_phase_inductance = motor.inductance_d_H;
+    config_.current_limit = servo_config.max_current_A;
+    config_.velocity_limit = servo_config.max_velocity;
+    config_.control_mode = 0;
+    config_.pos_gain = servo_config.pid_position.kp;
+    config_.vel_gain = servo_config.pid_position.kd;
+    config_.vel_integrator_gain = servo_config.pid_position.ki;
+    config_.current_ctrl_bw = servo_config.pid_dq_hz;
+    config_.anticogging_enable = motor.cogging_dq_scale != 0.0f;
+    config_.sync_target_enable = 0;
+    config_.target_velocity_window = CleanFloat(servo_config.fault_velocity_error);
+    config_.target_position_window = CleanFloat(servo_config.fault_position_error);
+    config_.torque_ramp_rate = servo_config.max_current_desired_rate;
+    config_.velocity_ramp_rate = servo_config.default_accel_limit;
+    config_.position_filter_bw = 0.0f;
+    config_.profile_velocity = CleanFloat(servo_config.default_velocity_limit);
+    config_.profile_accel = servo_config.default_accel_limit;
+    config_.profile_decel = servo_config.default_accel_limit;
+    config_.protect_under_voltage = 0.0f;
+    config_.protect_over_voltage = servo_config.max_voltage;
+    config_.protect_over_current = servo_config.max_current_A;
+    config_.protect_i_bus_max = CleanFloat(servo_config.max_regen_power_W);
+    config_.node_id = multiplex_protocol_->config()->id;
+    config_.can_baudrate = 0;
+
+    if (position_config != nullptr) {
+      config_.encoder_dir = position_config->output.sign;
+      config_.encoder_offset = static_cast<int32_t>(position_config->output.offset);
+    }
   }
 
   void PollMillisecond() {
@@ -50,6 +98,10 @@ private:
   static constexpr uint8_t NodeOffset = 5;
   static constexpr uint8_t CmdOffset = 0;
   static constexpr uint32_t DefaultHeartbeatProducerMs = 1000;
+
+  static float CleanFloat(float value) {
+    return std::isnan(value) ? 0.0f : value;
+  }
 
   enum Dir : uint8_t {
     Receive = 0,

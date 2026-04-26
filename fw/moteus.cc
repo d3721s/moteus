@@ -260,16 +260,16 @@ int main(void) {
       &pool, &command_manager, &telemetry_manager, &multiplex_protocol,
       moteus_controller.bldc_servo());
 
+  CanConfig can_config, old_can_config;
+
   CustomProtocol custom_protocol(&multiplex_protocol,
-                                 moteus_controller.bldc_servo(),
-                                 &fdcan, &persistent_config);
+                                  moteus_controller.bldc_servo(),
+                                  &fdcan, &persistent_config);
   fdcan_micro_server.SetCustomHandler(
       CustomProtocol::CallbackTrampoline, &custom_protocol);
 
   // GitInfo git_info;
   // telemetry_manager.Register("git", &git_info);
-
-  CanConfig can_config, old_can_config;
 
   // We always want to update our filters at least once.
   uint8_t old_multiplex_id = 255;
@@ -334,6 +334,8 @@ int main(void) {
   persistent_config.Register("can", &can_config, maybe_update_filters);
 
   persistent_config.Load();
+
+  custom_protocol.Init();
 
   moteus_controller.Start();
   command_manager.AsyncStart();
