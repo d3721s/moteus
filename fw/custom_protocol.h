@@ -304,7 +304,7 @@ private:
 
     if (bldc_servo_->status().mode != BldcServo::Mode::kPosition) {
       int32_t fault_value = static_cast<int32_t>(bldc_servo_->status().fault);
-      // 防止出现错误码为kSuccess但模式为kFault时错误地返回成功状态
+      // 防止出现错误码为 kSuccess 但模式为 kFault 时错误地返回成功状态
       char reply[4] = {0xFF};
       reply[0] = fault_value & 0xFF;
       reply[1] = (fault_value >> 8) & 0xFF;
@@ -466,7 +466,7 @@ private:
     // board NTC: °C × 10 → int16
     const int16_t ntc_i16 = static_cast<int16_t>(s.fet_temp_C * 10.0f);
     // Iq current: A × 100 → int16
-    const int16_t iq_i16 = static_cast<int16_t>(s.iq_current * 100.0f);
+    const int16_t iq_i16 = static_cast<int16_t>(s.q_A * 100.0f);
 
     char reply[16] = {0};
     reply[0] = vel_i16 & 0xFF;
@@ -562,7 +562,7 @@ private:
   // status_code         bldc_servo_->status().mode
   // errors_code         bldc_servo_->status().fault
   // 板载NTC             bldc_servo_->status().fet_temp_C
-  // Iq电流              bldc_servo_->status().iq_current
+  // Iq电流              bldc_servo_->status().q_A
 };
 
 } // namespace moteus
