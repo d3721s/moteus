@@ -24,7 +24,7 @@ First, you need a [diametrically magnetized magnet](https://www.kjmagnetics.com/
 
 Second, the magnet must be rigidly affixed to the rotor. No slipping is permitted whatsoever. Practically, that means that adhesive will be required at each junction between the magnet and the rotor. Common adhesives used are cyanoacrylate gel (superglue), and epoxy. For instance, if a 3D printed spacer is used, the magnet must be glued to the spacer, and the spacer must be glued to the rotor. When the rotor moves, the magnet must move. Press fits can be problematic unless the fit is designed with a well specified tolerance and relying on friction between a magnet and something it is attracted to will definitely not work.
 
-Third, the magnet must be positioned laterally properly. This means that it needs to be centered under the magnetic encoder. For [moteus-n1](https://mjbots.com/products/moteus-n1) and [moteus-c1](https://mjbots.com/products/moteus-c1), that is centered under the bolt pattern. For [moteus-r4](https://mjbots.com/products/moteus-r4-11), you should [look at the 2D CAD](https://github.com/mjbots/moteus/blob/main/hw/controller/r4.5/20210124-moteus-controller-r45-mechanical.pdf) to see where to position the magnet.
+Third, the magnet must be positioned laterally properly. This means that it needs to be centered under the magnetic encoder. For all moteus controllers but the moteus-r4, this is centered under the bolt pattern. For [moteus-r4](https://mjbots.com/products/moteus-r4-11), you should [look at the 2D CAD](https://github.com/mjbots/moteus/blob/main/hw/controller/r4.5/20210124-moteus-controller-r45-mechanical.pdf) to see where to position the magnet.
 
 The magnet also needs an appropriate air gap between the surface of the magnet and the surface of the encoder IC. For the magnets that mjbots sells, 2mm is near the optimal air gap, with a range of 1.5mm - 2.5mm being suitable. Spacing of 0.5mm - 8mm will likely work with degraded performance.
 
@@ -44,7 +44,7 @@ I have observed a few less common problems associated with sense magnets.
 
 In one case, the magnet was actually glued both to the rotor and to a stationary mounting bracket, preventing the rotor from moving at all.
 
-In other cases, magnets were allowed to exceed their rated operating temperature. The magnets mjbots sells as of May 2024 are rated to 80C. If the temperature approaches that point, often above 70C, then the axis of magnetization can drift. If that is an issue, then magnets can be procured with higher rated temperatures.
+In other cases, magnets were allowed to exceed their rated operating temperature. The [magnets included with the moteus-r4, moteus-n1, and moteus-c1](https://mjbots.com/products/diametric-disc-magnet?variant=44912247013537) are rated to 70C.  If that is an issue, then magnets can be procured with higher rated temperatures, such as the [140C one from mjbots which is included with the moteus-x1](https://mjbots.com/products/diametric-disc-magnet?variant=44912246751393).
 
 Sense magnets for commutation must be rigidly affixed to the rotor, \*not\* to the output of a reducer, or any linkage that may have backlash. If the magnet is attached to a reducer, then the required angular accuracy can easily exceed what the onboard encoder is capable of measuring. Linkages with backlash have the same problem.
 

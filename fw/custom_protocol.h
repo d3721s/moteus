@@ -29,9 +29,6 @@ public:
   }
 
 private:
-  static constexpr uint32_t FwVersionMajor = 1;
-  static constexpr uint32_t FwVersionMinor = 0;
-
   static constexpr int8_t DlcAny = -1;
   static constexpr int8_t DlcNotUsed = -2;
 
