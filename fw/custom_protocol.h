@@ -8,8 +8,8 @@
 #include "fw/bldc_servo.h"
 #include "fw/error.h"
 #include "fw/fdcan.h"
-#include "fw/math.h"
 #include "fw/moteus_hw.h"
+#include "fw/torque_model.h"
 #include "mjlib/micro/command_manager.h"
 #include "mjlib/multiplex/micro_server.h"
 // using mjlib::micro::CommandManager;
@@ -37,17 +37,20 @@ public:
 
     const auto &servo_config = bldc_servo_->config();
     const auto &motor = bldc_servo_->motor();
+    const auto &torque_model = bldc_servo_->torque_model();
     const auto *position_config = bldc_servo_->motor_position_config();
 
-    config_.invert_motor_dir = motor.phase_invert;
+    config_.invert_motor_dir = position_config != nullptr ?
+        position_config->output.sign : 0;
     config_.inertia = servo_config.inertia_feedforward;
-    config_.torque_constant = motor.Kv == 0.0f ? 0.1f :
-        ((3.0f / 2.0f) * (1.0f / kSqrt3) * (60.0f / k2Pi)) / motor.Kv;
+    config_.torque_constant = torque_model.torque_constant_;
     config_.motor_pole_pairs = motor.poles / 2;
     config_.motor_phase_resistance = motor.resistance_ohm;
     config_.motor_phase_inductance = motor.inductance_d_H;
     config_.current_limit = servo_config.max_current_A;
     config_.velocity_limit = servo_config.max_velocity;
+    config_.calib_current = 0.0f;
+    config_.calib_voltage = 0.0f;
     config_.control_mode = 0;
     config_.pos_gain = servo_config.pid_position.kp;
     config_.vel_gain = servo_config.pid_position.kd;
@@ -69,11 +72,18 @@ public:
     config_.protect_i_bus_max = CleanFloat(servo_config.max_regen_power_W);
     config_.node_id = multiplex_protocol_->config()->id;
     config_.can_baudrate = 0;
+    config_.heartbeat_consumer_ms = 0;
+    config_.heartbeat_producer_ms = 0;
+    config_.calib_valid = 0;
 
     if (position_config != nullptr) {
       config_.encoder_dir = position_config->output.sign;
       config_.encoder_offset = static_cast<int32_t>(position_config->output.offset);
+    } else {
+      config_.encoder_dir = 0;
+      config_.encoder_offset = 0;
     }
+    config_.offset_lut = 0;
   }
 
   void PollMillisecond() {

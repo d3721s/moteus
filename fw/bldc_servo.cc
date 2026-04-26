@@ -242,6 +242,7 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
   const Status& status() const { return status_; }
   const Config& config() const { return config_; }
   const Motor& motor() const { return motor_; }
+  const TorqueModel& torque_model() const { return torque_model_; }
   const Control& control() const { return control_; }
   const AuxPort::Status& aux1() const { return *aux1_port_->status(); }
   const AuxPort::Status& aux2() const { return *aux2_port_->status(); }
@@ -1481,6 +1482,10 @@ const BldcServo::Config& BldcServo::config() const {
 
 const BldcServo::Motor& BldcServo::motor() const {
   return impl_->motor();
+}
+
+const TorqueModel& BldcServo::torque_model() const {
+  return impl_->torque_model();
 }
 
 const BldcServo::Control& BldcServo::control() const {

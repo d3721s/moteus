@@ -37,6 +37,8 @@
 
 namespace moteus {
 
+class TorqueModel;
+
 /// Implements a closed loop servo around a brushless DC motor.
 class BldcServo {
  public:
@@ -96,6 +98,7 @@ class BldcServo {
   const Status& status() const;
   const Config& config() const;
   const Motor& motor() const;
+  const TorqueModel& torque_model() const;
   const Control& control() const;
   const AuxPort::Status& aux1() const;
   const AuxPort::Status& aux2() const;
