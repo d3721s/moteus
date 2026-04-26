@@ -7,9 +7,9 @@
 #include "fw/bldc_servo.h"
 #include "fw/error.h"
 #include "fw/fdcan.h"
+#include "fw/moteus_hw.h"
 #include "mjlib/micro/command_manager.h"
 #include "mjlib/multiplex/micro_server.h"
-#include "fw/moteus_hw.h"
 // using mjlib::micro::CommandManager;
 
 namespace moteus {
@@ -29,11 +29,15 @@ public:
   }
 
   void PollMillisecond() {
-    if (!auto_value_1_enabled_) {
-      return;
+    if (ms_since_last_send_ < std::numeric_limits<uint32_t>::max()) {
+      ms_since_last_send_++;
     }
 
-    HandleGetValue1(0, nullptr);
+    if (!auto_value_1_enabled_) {
+      PollHeartbeatProducer();
+    } else {
+      HandleGetValue1(0, nullptr);
+    }
   }
 
 private:
@@ -45,6 +49,7 @@ private:
   static constexpr uint8_t DirOffset = 10;
   static constexpr uint8_t NodeOffset = 5;
   static constexpr uint8_t CmdOffset = 0;
+  static constexpr uint32_t DefaultHeartbeatProducerMs = 1000;
 
   enum Dir : uint8_t {
     Receive = 0,
@@ -235,8 +240,26 @@ private:
     FDCan::SendOptions options;
     options.fdcan_frame = FDCan::Override::kRequire;
     options.bitrate_switch = FDCan::Override::kRequire;
-    fdcan_->Send(can_id, std::string_view(data, dlc), options);
+    const char empty = 0;
+    fdcan_->Send(can_id, std::string_view(dlc == 0 ? &empty : data, dlc),
+                 options);
+    ms_since_last_send_ = 0;
     return true;
+  }
+
+  void PollHeartbeatProducer() {
+    const uint32_t producer_ms =
+        config_.heartbeat_producer_ms > 0
+            ? static_cast<uint32_t>(config_.heartbeat_producer_ms)
+            : DefaultHeartbeatProducerMs;
+    if (ms_since_last_send_ < producer_ms) {
+      return;
+    }
+
+    SendFrame(Send << DirOffset |
+                  (multiplex_protocol_->config()->id << NodeOffset) |
+                  CAN_CMD_HEARTBEAT,
+              0, nullptr);
   }
 
   bool HandleFrame(uint32_t can_id, int dlc, const char *data) {
@@ -458,7 +481,7 @@ private:
 
     const auto &s = bldc_servo_->status();
     const auto &mp = bldc_servo_->motor_position();
-    #warning "单位需确定"
+#warning "单位需确定"
     // velocity: rev/s × 100 → int16
     const int16_t vel_i16 = static_cast<int16_t>(s.velocity * 100.0f);
     // position: rev × 100 → int16
@@ -506,7 +529,7 @@ private:
   bool HandleGetConfig(int dlc, const char *data) { return false; }
   bool HandleSaveAllConfig(int dlc, const char *data) { return false; }
   bool HandleResetAllConfig(int dlc, const char *data) { return false; }
-  bool HandleHeartbeat(int dlc, const char *data) { return false; }
+  bool HandleHeartbeat(int dlc, const char *data) { return true; }
   bool HandleStartAuto(int dlc, const char *data) {
     auto_value_1_enabled_ = (data[0] == 1);
 
@@ -573,6 +596,7 @@ private:
   uint32_t errors_;
 
   bool auto_value_1_enabled_ = false;
+  uint32_t ms_since_last_send_ = 0;
 
   // 速度                bldc_servo_->status().velocity
   // 位置                bldc_servo_->status().position
