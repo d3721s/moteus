@@ -14,9 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-package(default_visibility = ["//visibility:public"])
-load("@com_github_ARMmbed_mbed-g4//:rules.bzl", g4_mbed_binary = "mbed_binary")
-load("@com_github_ARMmbed_mbed-g4-bootloader//:rules.bzl", g4_bootloader_mbed_binary = "mbed_binary")
+package(default_visibility=["//visibility:public"])
+load("@com_github_ARMmbed_mbed-g4//:rules.bzl", g4_mbed_binary="mbed_binary")
+load(
+    "@com_github_ARMmbed_mbed-g4-bootloader//:rules.bzl",
+    g4_bootloader_mbed_binary="mbed_binary",
+)
 
 COPTS = [
     "-Werror",
@@ -25,8 +28,8 @@ COPTS = [
 ]
 
 cc_library(
-    name = "common",
-    hdrs = [
+    name="common",
+    hdrs=[
         "bldc_servo_control.h",
         "bldc_servo_position.h",
         "bldc_servo_structs.h",
@@ -45,10 +48,10 @@ cc_library(
         "strtof.h",
         "bissc_extract.h",
     ],
-    srcs = [
+    srcs=[
         "foc.cc",
     ],
-    deps = [
+    deps=[
         "@com_github_mjbots_mjlib//mjlib/base:limit",
         "@com_github_mjbots_mjlib//mjlib/base:visitor",
         "@com_github_mjbots_mjlib//mjlib/micro:atomic_event_queue",
@@ -56,28 +59,28 @@ cc_library(
         "@com_github_mjbots_mjlib//mjlib/micro:persistent_config",
         "@com_github_mjbots_mjlib//mjlib/micro:telemetry_manager",
     ],
-    copts = COPTS,
+    copts=COPTS,
 )
 
 cc_library(
-    name = "git_info",
-    hdrs = ["git_info.h"],
-    srcs = ["git_info.cc"],
-    linkstamp = "git_info_linkstamp.cc",
-    deps = [
+    name="git_info",
+    hdrs=["git_info.h"],
+    srcs=["git_info.cc"],
+    linkstamp="git_info_linkstamp.cc",
+    deps=[
         "@com_github_mjbots_mjlib//mjlib/base:visitor",
     ],
-    copts = COPTS,
+    copts=COPTS,
 )
 
 g4_bootloader_mbed_binary(
-    name = "can_bootloader",
-    srcs = [
+    name="can_bootloader",
+    srcs=[
         "bootloader.h",
         "can_bootloader.cc",
         "stm32g4xx_fdcan_typedefs.h",
     ],
-    deps = [
+    deps=[
         ":git_info",
         "@com_github_mjbots_mjlib//mjlib/base:buffer_stream",
         "@com_github_mjbots_mjlib//mjlib/base:tokenizer",
@@ -85,9 +88,9 @@ g4_bootloader_mbed_binary(
         "@com_github_mjbots_mjlib//mjlib/multiplex:stream",
         "@boost",
     ],
-    linker_script = "stm32g474_bootloader.ld",
-    enable_wrappers = False,
-    copts = COPTS,
+    linker_script="stm32g474_bootloader.ld",
+    enable_wrappers=False,
+    copts=COPTS,
 )
 
 MOTEUS_SOURCES = [
@@ -165,8 +168,9 @@ MOTEUS_DEPS = [
 ]
 
 g4_mbed_binary(
-    name = "moteus",
-    srcs = MOTEUS_SOURCES + [
+    name="moteus",
+    srcs=MOTEUS_SOURCES
+    + [
         "stm32g4_flash.h",
         "fdcan.h",
         "fdcan.cc",
@@ -174,46 +178,47 @@ g4_mbed_binary(
         "multi_transport_datagram_server.h",
         "uart_fdcanusb_micro_server.h",
     ],
-    deps = MOTEUS_DEPS,
-    linker_script = "stm32g474.ld",
-    features = ["speedopt"],
-    copts = COPTS,
+    deps=MOTEUS_DEPS,
+    linker_script="stm32g474.ld",
+    features=["speedopt"],
+    copts=COPTS,
 )
 
 genrule(
-    name = "bin",
-    srcs = ["moteus.elf", "can_bootloader.elf"],
-    outs = [
+    name="bin",
+    srcs=["moteus.elf", "can_bootloader.elf"],
+    outs=[
         "moteus.08000000.bin",
         "moteus.0800c000.bin",
         "moteus.08010000.bin",
     ],
-    cmd = ("$(OBJCOPY) -Obinary -j .text -j .ARM.extab -j .ARM.exidx -j .data -j .ccmram -j .bss $(location moteus.elf) $(location moteus.08010000.bin) && " +
-           "$(OBJCOPY) -Obinary -j .text -j .ARM.extab -j .ARM.exidx -j .data -j .bss $(location can_bootloader.elf) $(location moteus.0800c000.bin) && " +
-           "$(OBJCOPY) -Obinary -j .isr_vector $(location moteus.elf) $(location moteus.08000000.bin)"),
-    toolchains = [
+    cmd=(
+        "$(OBJCOPY) -Obinary -j .text -j .ARM.extab -j .ARM.exidx -j .data -j .ccmram -j .bss $(location moteus.elf) $(location moteus.08010000.bin) && "
+        + "$(OBJCOPY) -Obinary -j .text -j .ARM.extab -j .ARM.exidx -j .data -j .bss $(location can_bootloader.elf) $(location moteus.0800c000.bin) && "
+        + "$(OBJCOPY) -Obinary -j .isr_vector $(location moteus.elf) $(location moteus.08000000.bin)"
+    ),
+    toolchains=[
         "@bazel_tools//tools/cpp:current_cc_toolchain",
     ],
-    output_to_bindir = True,
+    output_to_bindir=True,
 )
 
-OCD_G4 = (
-    "openocd " +
-    "-f interface/stlink.cfg " +
-    "-f target/stm32g4x.cfg "
-)
+OCD_G4 = "openocd " + "-f interface/stlink.cfg " + "-f target/stm32g4x.cfg "
 
 genrule(
-    name = "flash",
-    tags = ["manual"],
-    srcs = ["moteus.08000000.bin", "moteus.0800c000.bin", "moteus.08010000.bin"],
-    outs = ["flash.stamp"],
-    cmd = (OCD_G4 + " -c init -c \"reset_config none separate; program $(location moteus.08000000.bin) verify 0x8000000; program $(location moteus.0800c000.bin) verify 0x800c000; program $(location moteus.08010000.bin) verify reset exit 0x08010000\" && touch $@"),
+    name="flash",
+    tags=["manual"],
+    srcs=["moteus.08000000.bin", "moteus.0800c000.bin", "moteus.08010000.bin"],
+    outs=["flash.stamp"],
+    cmd=(
+        OCD_G4
+        + ' -c init -c "reset_config none separate; program $(location moteus.08000000.bin) verify 0x8000000; program $(location moteus.0800c000.bin) verify 0x800c000; program $(location moteus.08010000.bin) verify reset exit 0x08010000" && touch $@'
+    ),
 )
 
 cc_test(
-    name = "test",
-    srcs = [
+    name="test",
+    srcs=[
         "test/bldc_servo_control_test.cc",
         "test/bldc_servo_position_test.cc",
         "test/foc_test.cc",
@@ -224,50 +229,52 @@ cc_test(
         "test/torque_model_test.cc",
         "test/test_main.cc",
     ],
-    data = [
+    data=[
         ":multiplex_tool",
     ],
-    deps = [
+    deps=[
         ":common",
         "@boost//:test",
         "@fmt",
         "@com_github_mjbots_mjlib//mjlib/micro:test_fixtures",
     ],
-    size = "small",
+    size="small",
 )
 
 cc_test(
-    name = "slow_test",
-    srcs = [
+    name="slow_test",
+    srcs=[
+        "test/motor_model.h",
         "test/simulation_fixture.h",
         "test/simulation_dynamometer_test.cc",
+        "test/simulation_regen_test.cc",
         "test/simulation_test.cc",
         "test/spmsm_motor_simulator.h",
         "test/test_main.cc",
     ],
-    deps = [
+    deps=[
         ":common",
         "@boost//:test",
         "@fmt",
         "@com_github_mjbots_mjlib//mjlib/micro:test_fixtures",
     ],
-    size = "medium",
+    size="medium",
 )
 
 cc_binary(
-    name = "multiplex_tool",
-    srcs = ["multiplex_tool_main.cc"],
-    deps = [
+    name="multiplex_tool",
+    srcs=["multiplex_tool_main.cc"],
+    deps=[
         "@com_github_mjbots_mjlib//mjlib/multiplex:libmultiplex_tool",
     ],
 )
 
 cc_binary(
-    name = "hall_filter_test",
-    srcs = [
+    name="hall_filter_test",
+    srcs=[
         "test/hall_filter_test.cc",
     ],
-    deps = [
+    deps=[
         "@boost//:test",
         "//fw:common",
         "@com_github_mjbots_mjlib//mjlib/base:clipp",
@@ -280,11 +287,11 @@ cc_binary(
 )
 
 cc_binary(
-    name = "encoder_bandwidth_test",
-    srcs = [
+    name="encoder_bandwidth_test",
+    srcs=[
         "test/encoder_bandwidth_test.cc",
     ],
-    deps = [
+    deps=[
         "@boost//:test",
         "//fw:common",
         "@com_github_mjbots_mjlib//mjlib/base:clipp",
@@ -299,31 +306,33 @@ cc_binary(
 # A dummy target so that running all host tests will result in all our
 # host binaries being built.
 py_test(
-    name = "dummy_host_test",
-    srcs = [
+    name="dummy_host_test",
+    srcs=[
         "test/dummy_host_test.py",
     ],
-    deps = [
+    deps=[
         ":hall_filter_test",
         ":encoder_bandwidth_test",
     ],
-    size = "small",
+    size="small",
 )
 
 py_test(
-    name = "hall_regression_test",
-    srcs = [
+    name="hall_regression_test",
+    srcs=[
         "test/hall_regression_test.py",
     ],
-    deps = [
+    deps=[
         ":hall_filter_test",
     ],
-    args = [
-        "--binary", "$(location :hall_filter_test)",
-        "--datafile", "$(rootpath :test/data/20250616-back-and-forth.dat.gz)",
+    args=[
+        "--binary",
+        "$(location :hall_filter_test)",
+        "--datafile",
+        "$(rootpath :test/data/20250616-back-and-forth.dat.gz)",
     ],
-    size = 'medium',
-    data = [
+    size="medium",
+    data=[
         "test/data/20250616-back-and-forth.dat.gz",
         "test/data/20250616-hboard-cycle.dat.gz",
         "test/data/20250616-speed-cycle.dat.gz",
@@ -334,22 +343,23 @@ py_test(
 )
 
 py_test(
-    name = "encoder_bw_regression_test",
-    srcs = [
+    name="encoder_bw_regression_test",
+    srcs=[
         "test/encoder_bw_regression_test.py",
     ],
-    deps = [
+    deps=[
         ":encoder_bandwidth_test",
     ],
-    args = [
-        "--binary", "$(location :encoder_bandwidth_test)",
+    args=[
+        "--binary",
+        "$(location :encoder_bandwidth_test)",
     ],
-    size = "medium",
+    size="medium",
 )
 
 test_suite(
-    name = "host",
-    tests = [
+    name="host",
+    tests=[
         "test",
         "slow_test",
         "dummy_host_test",

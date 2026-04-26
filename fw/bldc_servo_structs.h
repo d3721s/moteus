@@ -39,6 +39,39 @@ struct Vec3 {
   }
 };
 
+struct FieldWeakeningConfig {
+  bool enable = false;
+  float modulation_margin = 0.15f;
+
+  // The cutoff frequency for the low-pass filter on the FW Id
+  // command.  This limits how fast the field weakening current can
+  // change.
+  float bandwidth_hz = 100.0f;
+
+  float max_current_ratio = 0.5f;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(enable));
+    a->Visit(MJ_NVP(modulation_margin));
+    a->Visit(MJ_NVP(bandwidth_hz));
+    a->Visit(MJ_NVP(max_current_ratio));
+  }
+};
+
+struct FieldWeakeningStatus {
+  float id_A = 0.0f;
+  // Characteristic current psi_m / L_d, computed per-cycle from the
+  // dynamic D-axis inductance.
+  float id_char = 0.0f;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(MJ_NVP(id_A));
+    a->Visit(MJ_NVP(id_char));
+  }
+};
+
 enum BldcServoMode {
   // In this mode, the entire motor driver will be disabled.
   //
@@ -99,9 +132,9 @@ enum BldcServoMode {
   // that region.
   kStayWithinBounds = 13,
 
-  // This mode applies a fixed voltage square waveform in the D axis
-  // in order to measure inductance assuming a motor with
-  // approximately equal D/Q axis inductances.
+  // This mode applies a fixed voltage square waveform to measure
+  // inductance.  The meas_ind_axis field selects whether the D or Q
+  // axis is excited.
   kMeasureInductance = 14,
 
   // All phases are pulled to ground.
@@ -139,6 +172,8 @@ struct BldcServoStatus {
   float motor_temp_C = 0.0f;
   float filt_motor_temp_C = std::numeric_limits<float>::quiet_NaN();
 
+  float inductance_d_H = 0.0f;
+
   float d_A = 0.0f;
   float q_A = 0.0f;
 
@@ -164,7 +199,11 @@ struct BldcServoStatus {
   bool trajectory_done = false;
 
   float motor_max_velocity = 0.0f;
+  float motor_base_velocity = 0.0f;
   float max_power_W = 0.0f;
+  float effective_max_current_A = 0.0f;
+
+  FieldWeakeningStatus fw;
 
   float torque_error_Nm = 0.0f;
 
@@ -175,6 +214,7 @@ struct BldcServoStatus {
   uint32_t total_timer = 0;
 
   float meas_ind_old_d_A = 0.0f;
+  float meas_ind_old_q_A = 0.0f;
   int8_t meas_ind_phase = 0;
   float meas_ind_integrator = 0.0f;
 
@@ -240,6 +280,8 @@ struct BldcServoStatus {
     a->Visit(MJ_NVP(motor_temp_C));
     a->Visit(MJ_NVP(filt_motor_temp_C));
 
+    a->Visit(MJ_NVP(inductance_d_H));
+
     a->Visit(MJ_NVP(d_A));
     a->Visit(MJ_NVP(q_A));
 
@@ -262,7 +304,10 @@ struct BldcServoStatus {
     a->Visit(MJ_NVP(trajectory_done));
 
     a->Visit(MJ_NVP(motor_max_velocity));
+    a->Visit(MJ_NVP(motor_base_velocity));
     a->Visit(MJ_NVP(max_power_W));
+    a->Visit(MJ_NVP(effective_max_current_A));
+    a->Visit(MJ_NVP(fw));
     a->Visit(MJ_NVP(torque_error_Nm));
 
     a->Visit(MJ_NVP(sin));
@@ -272,6 +317,7 @@ struct BldcServoStatus {
     a->Visit(MJ_NVP(total_timer));
 
     a->Visit(MJ_NVP(meas_ind_old_d_A));
+    a->Visit(MJ_NVP(meas_ind_old_q_A));
     a->Visit(MJ_NVP(meas_ind_phase));
     a->Visit(MJ_NVP(meas_ind_integrator));
 
@@ -338,6 +384,8 @@ struct BldcServoCommandData {
 
   // For kMeasureInductance
   int8_t meas_ind_period = 4;
+  // 0 = d-axis (default), 1 = q-axis
+  int8_t meas_ind_axis = 0;
 
 
   /////// NOT SERIALIZED
@@ -380,6 +428,7 @@ struct BldcServoCommandData {
     a->Visit(MJ_NVP(bounds_min));
     a->Visit(MJ_NVP(bounds_max));
     a->Visit(MJ_NVP(meas_ind_period));
+    a->Visit(MJ_NVP(meas_ind_axis));
   }
 };
 
@@ -389,7 +438,17 @@ struct BldcServoMotor {
   // Invert the order of phase movement.
   uint8_t phase_invert = 0;
 
+  // Phase-to-center resistance in ohms.
   float resistance_ohm = 0.0f;
+
+  // D-axis phase-to-center inductance in henries.
+  float inductance_d_H = 0.0f;
+  // Q-axis phase-to-center inductance in henries.
+  float inductance_q_H = 0.0f;
+
+  // D-axis inductance linear scale factor (H/A).
+  // Effective L_d = inductance_d_H + inductance_d_scale * min(i_d, 0)
+  float inductance_d_scale = 0.0f;
 
   float Kv = 0.0f;
 
@@ -422,6 +481,9 @@ struct BldcServoMotor {
     a->Visit(MJ_NVP(poles));
     a->Visit(MJ_NVP(phase_invert));
     a->Visit(MJ_NVP(resistance_ohm));
+    a->Visit(MJ_NVP(inductance_d_H));
+    a->Visit(MJ_NVP(inductance_q_H));
+    a->Visit(MJ_NVP(inductance_d_scale));
     a->Visit(MJ_NVP(Kv));
     a->Visit(MJ_NVP(offset));
     a->Visit(MJ_NVP(rotation_current_cutoff_A));
@@ -496,9 +558,14 @@ struct BldcServoConfig {
   // need a larger sampling time.
   uint16_t adc_aux_cycles = 47;
 
-  // We use the same PID constants for D and Q current control
-  // loops.
-  SimplePI::Config pid_dq;
+  // Current control loop bandwidth in Hz.  The firmware computes the
+  // actual PI gains from this and the motor inductance/resistance at
+  // config update time.
+  float pid_dq_hz = 100.0f;
+
+  // Maximum rate of change of desired current in A/s.  0 is unlimited.
+  float max_current_desired_rate = 10000.0f;
+
   PID::Config pid_position;
 
   // Use the configured motor resistance to apply a feedforward phase
@@ -514,6 +581,9 @@ struct BldcServoConfig {
   // Set to true to disable bemf feedforward sanity checks.
   bool bemf_feedforward_override = false;
 
+  // Scale factor for d-axis to q-axis cross-coupling feedforward.
+  float cross_coupling_feedforward = 1.0;
+
   // If non-zero, apply a feedforward torque of the desired angular
   // acceleration multiplied by this.
   float inertia_feedforward = 0.0f;
@@ -521,7 +591,7 @@ struct BldcServoConfig {
   // Default values for the position mode velocity and acceleration
   // limits.
   float default_velocity_limit = std::numeric_limits<float>::quiet_NaN();
-  float default_accel_limit = std::numeric_limits<float>::quiet_NaN();
+  float default_accel_limit = 50.0f;
 
   // If true, then the currents in A that are calculated for the D
   // and Q phase are instead directly commanded as voltages on the
@@ -555,6 +625,16 @@ struct BldcServoConfig {
   // below 'max_voltage'.
   float flux_brake_margin_voltage = 3.0f;
   float flux_brake_resistance_ohm = 0.025f;
+
+  // Maximum power (watts) allowed to regenerate back to the bus.
+  // When the motor is braking and the estimated regen power exceeds
+  // this limit, d-axis current is injected to dissipate the excess as
+  // I²R in the windings until a limit is reached, such as maximum
+  // current, motor temperature, or back emf.  The q-axis (braking)
+  // current is not modified.  NaN disables (default).
+  float max_regen_power_W = std::numeric_limits<float>::quiet_NaN();
+
+  FieldWeakeningConfig fw;
 
   float max_current_A =
       (g_measured_hw_family == 0 ||
@@ -591,13 +671,6 @@ struct BldcServoConfig {
   uint32_t emit_debug = 0;
 
   BldcServoConfig() {
-    pid_dq.kp = 0.005f;
-    pid_dq.ki = 30.0f;
-
-    // 100A in 10ms seems like a reasonably unrestricted default yet
-    // still provides a fair amount of control smoothing.
-    pid_dq.max_desired_rate = 10000.0f;
-
     pid_position.kp = 4.0f;
     pid_position.ki = 1.0f;
     pid_position.ilimit = 0.0f;
@@ -624,11 +697,13 @@ struct BldcServoConfig {
     a->Visit(MJ_NVP(position_derate));
     a->Visit(MJ_NVP(adc_cur_cycles));
     a->Visit(MJ_NVP(adc_aux_cycles));
-    a->Visit(MJ_NVP(pid_dq));
+    a->Visit(MJ_NVP(pid_dq_hz));
+    a->Visit(MJ_NVP(max_current_desired_rate));
     a->Visit(MJ_NVP(pid_position));
     a->Visit(MJ_NVP(current_feedforward));
     a->Visit(MJ_NVP(bemf_feedforward));
     a->Visit(MJ_NVP(bemf_feedforward_override));
+    a->Visit(MJ_NVP(cross_coupling_feedforward));
     a->Visit(MJ_NVP(inertia_feedforward));
     a->Visit(MJ_NVP(default_velocity_limit));
     a->Visit(MJ_NVP(default_accel_limit));
@@ -642,6 +717,8 @@ struct BldcServoConfig {
     a->Visit(MJ_NVP(timeout_mode));
     a->Visit(MJ_NVP(flux_brake_margin_voltage));
     a->Visit(MJ_NVP(flux_brake_resistance_ohm));
+    a->Visit(MJ_NVP(max_regen_power_W));
+    a->Visit(MJ_NVP(fw));
     a->Visit(MJ_NVP(max_current_A));
     a->Visit(MJ_NVP(derate_current_A));
     a->Visit(MJ_NVP(max_velocity));
@@ -672,6 +749,7 @@ struct BldcServoPositionConfig {
   }
 };
 
+/// Intermediate control outputs used by BldcServoControl.
 struct BldcServoControl_Control {
   Vec3 pwm;
   Vec3 voltage;

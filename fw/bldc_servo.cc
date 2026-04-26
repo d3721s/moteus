@@ -138,26 +138,6 @@ class PhaseMonitors {
   uint32_t mask_ = 0;
 };
 
-class ExponentialFilter {
- public:
-  ExponentialFilter() {}
-
-  ExponentialFilter(float rate_hz, float period_s)
-      : alpha_(1.0f / (rate_hz * period_s)),
-        one_minus_alpha_(1.0f - alpha_) {}
-
-  void operator()(float input, float* filtered) {
-    if (std::isnan(*filtered)) {
-      *filtered = input;
-    } else {
-      *filtered = alpha_ * input + one_minus_alpha_ * *filtered;
-    }
-  }
-
- private:
-  float alpha_ = 1.0;
-  float one_minus_alpha_ = 0.0;
-};
 }
 
 class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
@@ -296,15 +276,15 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
 
     flux_brake_min_voltage_ =
         config_.max_voltage - config_.flux_brake_margin_voltage;
+
     derate_temperature_ =
         config_.fault_temperature - config_.temperature_margin;
     motor_derate_temperature_ =
         config_.motor_fault_temperature - config_.motor_temperature_margin;
 
-    velocity_filter_ = ExponentialFilter(rate_config_.pwm_rate_hz, 0.01f);
-    temperature_filter_ = ExponentialFilter(rate_config_.pwm_rate_hz, 0.01f);
-    slow_bus_v_filter_ = ExponentialFilter(rate_config_.pwm_rate_hz, 0.5f);
-    fast_bus_v_filter_ = ExponentialFilter(rate_config_.pwm_rate_hz, 0.001f);
+    velocity_filter_ = ExponentialFilter(rate_config_.pwm_rate_hz, 100.0f);
+    temperature_filter_ = ExponentialFilter(rate_config_.pwm_rate_hz, 100.0f);
+    InitControlFilters(rate_config_.pwm_rate_hz);
 
     // Ensure that our maximum current stays within the range that can
     // be sensed.
@@ -325,7 +305,6 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
         is_torque_constant_configured() ?
         kTorqueFactor / motor_.Kv :
         kDefaultTorqueConstant;
-    v_per_hz_ = motor_.Kv == 0.0f ? 0.0f : 0.5f * 60.0f / motor_.Kv;
 
     adc_scale_ = 3.3f / (4096.0f *
                          config_.current_sense_ohm *
@@ -336,6 +315,9 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
     fet_thermistor_.Reset(47000.0f);
     motor_thermistor_.Reset(config_.motor_thermistor_ohm);
     motor_position_->SetRate(rate_config_.period_s);
+
+    UpdateDerivedMotorConstants();
+    UpdateFieldWeakeningIdChar();
   }
 
   void PollMillisecond() {
@@ -1028,9 +1010,6 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
     }
     status_.bus_V = status_.adc_voltage_sense_raw * vsense_adc_scale_;
 
-    slow_bus_v_filter_(status_.bus_V, &status_.filt_bus_V);
-    fast_bus_v_filter_(status_.bus_V, &status_.filt_1ms_bus_V);
-
     const SinCos sin_cos = ISR_CalculateDerivedQuantities(
         status_.cur1_A, status_.cur3_A, status_.cur2_A,
         use_synthetic_theta);
@@ -1220,6 +1199,32 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
       write_scalar(static_cast<uint16_t>(32767.0f * status_.power_W / 3000.0f));
     }
 
+    // Additional debug outputs for instability investigation
+    if (config_.emit_debug & (1 << 22)) {
+      // pid_d integral, scale ±100V range
+      write_scalar(static_cast<int16_t>(32767.0f * status_.pid_d.integral / 100.0f));
+    }
+    if (config_.emit_debug & (1 << 23)) {
+      // pid_q integral, scale ±100V range
+      write_scalar(static_cast<int16_t>(32767.0f * status_.pid_q.integral / 100.0f));
+    }
+    if (config_.emit_debug & (1 << 24)) {
+      // electrical_theta, scale 0-2pi to full int16 range
+      write_scalar(static_cast<int16_t>(32767.0f * status_.electrical_theta / kPi));
+    }
+    if (config_.emit_debug & (1 << 25)) {
+      // motor_base_velocity, scale ±200 rev/s
+      write_scalar(static_cast<int16_t>(32767.0f * status_.motor_base_velocity / 200.0f));
+    }
+    if (config_.emit_debug & (1 << 26)) {
+      // commanded d_A (i_d_A), scale ±100A range
+      write_scalar(static_cast<int16_t>(32767.0f * control_.i_d_A / 100.0f));
+    }
+    if (config_.emit_debug & (1 << 27)) {
+      // commanded q_A (i_q_A), scale ±100A range
+      write_scalar(static_cast<int16_t>(32767.0f * control_.i_q_A / 100.0f));
+    }
+
     // We rely on the FIFO to queue these things up.
     for (int i = 0; i < pos; i++) {
       debug_uart_->TDR = debug_buf_[i];
@@ -1262,6 +1267,7 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
     *pwm3_ccr_ = 0;
 
     status_.power_W = 0.0f;
+    status_.fw.id_A = 0.0f;
   }
 
   void DoCalibrating() MOTEUS_CCM_ATTRIBUTE {
@@ -1314,10 +1320,8 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
   Config config_;
   PositionConfig position_config_;
 
-  // This copy of the current epoch is intended to be accessed from the ISR.
-  uint8_t isr_motor_position_epoch_ = 0;
-
-  // This copy is only accessed from the main loop.
+  // Counterpart to isr_motor_position_epoch_ (inherited from
+  // BldcServoControl), only accessed from the main loop.
   uint8_t main_motor_position_epoch_ = 0;
 
   TIM_TypeDef* timer_ = nullptr;
@@ -1399,8 +1403,8 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
   uint32_t calibrate_adc3_ = 0;
   uint16_t calibrate_count_ = 0;
 
-  SimplePI pid_d_{&config_.pid_dq, &status_.pid_d};
-  SimplePI pid_q_{&config_.pid_dq, &status_.pid_q};
+  SimplePI pid_d_{&pid_d_config_, &status_.pid_d};
+  SimplePI pid_q_{&pid_q_config_, &status_.pid_q};
   PID pid_position_{&config_.pid_position, &status_.pid_position};
 
   USART_TypeDef* debug_uart_ = nullptr;
@@ -1410,17 +1414,8 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
   // 40000Hz.
   uint8_t debug_buf_[7] = {};
 
-  float torque_constant_ = 0.01f;
-  float v_per_hz_ = 0.0f;
-  float flux_brake_min_voltage_ = 0.0f;
-  float derate_temperature_ = 0.0f;
-  float motor_derate_temperature_ = 0.0f;
-
   float adc_scale_ = 0.0f;
   float pwm_derate_ = 1.0f;
-
-  float old_d_V_ = 0.0f;
-  float old_q_V_ = 0.0f;
 
   float vsense_adc_scale_ = 0.0f;
 
@@ -1436,8 +1431,6 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
 
   ExponentialFilter velocity_filter_;
   ExponentialFilter temperature_filter_;
-  ExponentialFilter slow_bus_v_filter_;
-  ExponentialFilter fast_bus_v_filter_;
 
   const bool family0_rev4_and_older_ = (
       g_measured_hw_family == 0 &&
