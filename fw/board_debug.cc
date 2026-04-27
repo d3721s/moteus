@@ -240,12 +240,8 @@ class BoardDebug::Impl {
     if (bldc_->status().mode == BldcServo::Mode::kFault ||
         bldc_->status().mode == BldcServo::Mode::kPositionTimeout) {
       if (write_outstanding_) { return; }
-      ::snprintf(out_message_, sizeof(out_message_),
-                 "CAL fault mode=%d fault=%d\r\n",
-                 static_cast<int>(bldc_->status().mode),
-                 static_cast<int>(bldc_->status().fault));
-      WriteMessage(cal_response_, out_message_);
 
+      WriteMessage(cal_response_, "CAL fault\r\n");
       cal_response_ = {};
       motor_cal_mode_ = kNoMotorCal;
 
