@@ -1006,7 +1006,7 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
     status_.bus_V = status_.adc_voltage_sense_raw * vsense_adc_scale_;
 
     const SinCos sin_cos = ISR_CalculateDerivedQuantities(
-        status_.cur1_A, status_.cur2_A, status_.cur3_A,
+        status_.cur2_A, status_.cur1_A, status_.cur3_A,
         use_synthetic_theta);
 
     status_.max_power_W = [&]() {
