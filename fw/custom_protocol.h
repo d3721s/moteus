@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <mbed.h>
 
@@ -71,7 +72,7 @@ public:
     config_.protect_over_current = servo_config.max_current_A;
     config_.protect_i_bus_max = CleanFloat(servo_config.max_regen_power_W);
     config_.node_id = multiplex_protocol_->config()->id;
-    config_.can_baudrate = 0;
+    config_.can_baudrate = fdcan_ != nullptr ? fdcan_->fast_bitrate() : 0;
     config_.heartbeat_consumer_ms = 0;
     config_.heartbeat_producer_ms = 0;
     config_.calib_valid = 0;
@@ -111,6 +112,30 @@ private:
 
   static float CleanFloat(float value) {
     return std::isnan(value) ? 0.0f : value;
+  }
+
+  static uint32_t ToRaw(float value) {
+    uint32_t result = 0;
+    std::memcpy(&result, &value, sizeof(result));
+    return result;
+  }
+
+  static uint32_t ToRaw(int32_t value) {
+    uint32_t result = 0;
+    std::memcpy(&result, &value, sizeof(result));
+    return result;
+  }
+
+  static float ToFloat(uint32_t value) {
+    float result = 0.0f;
+    std::memcpy(&result, &value, sizeof(result));
+    return result;
+  }
+
+  static int32_t ToInt32(uint32_t value) {
+    int32_t result = 0;
+    std::memcpy(&result, &value, sizeof(result));
+    return result;
   }
 
   enum Dir : uint8_t {
@@ -322,6 +347,229 @@ private:
                   (multiplex_protocol_->config()->id << NodeOffset) |
                   CAN_CMD_HEARTBEAT,
               0, nullptr);
+  }
+
+  void ApplyConfigSideEffects(uint32_t index) {
+    if (bldc_servo_ != nullptr) {
+      auto &servo_config = const_cast<BldcServo::Config &>(bldc_servo_->config());
+      auto &motor = const_cast<BldcServo::Motor &>(bldc_servo_->motor());
+      auto &torque_model = const_cast<TorqueModel &>(bldc_servo_->torque_model());
+      auto *position_config = bldc_servo_->motor_position_config();
+
+      switch (index) {
+        case CONFIG_INVERT_MOTOR_DIR: {
+          if (position_config != nullptr) {
+            position_config->output.sign = config_.invert_motor_dir;
+          }
+          break;
+        }
+        case CONFIG_INERTIA: {
+          servo_config.inertia_feedforward = config_.inertia;
+          break;
+        }
+        case CONFIG_TORQUE_CONSTANT: {
+          torque_model = TorqueModel(config_.torque_constant,
+                                     motor.rotation_current_cutoff_A,
+                                     motor.rotation_current_scale,
+                                     motor.rotation_torque_scale);
+          break;
+        }
+        case CONFIG_MOTOR_POLE_PAIRS: {
+          motor.poles = config_.motor_pole_pairs * 2;
+          break;
+        }
+        case CONFIG_MOTOR_PHASE_RESISTANCE: {
+          motor.resistance_ohm = config_.motor_phase_resistance;
+          break;
+        }
+        case CONFIG_MOTOR_PHASE_INDUCTANCE: {
+          motor.inductance_d_H = config_.motor_phase_inductance;
+          motor.inductance_q_H = config_.motor_phase_inductance;
+          break;
+        }
+        case CONFIG_CURRENT_LIMIT: {
+          servo_config.max_current_A = config_.current_limit;
+          break;
+        }
+        case CONFIG_VELOCITY_LIMIT: {
+          servo_config.max_velocity = config_.velocity_limit;
+          break;
+        }
+        case CONFIG_POS_GAIN: {
+          servo_config.pid_position.kp = config_.pos_gain;
+          break;
+        }
+        case CONFIG_VEL_GAIN: {
+          servo_config.pid_position.kd = config_.vel_gain;
+          break;
+        }
+        case CONFIG_VEL_INTEGRATOR_GAIN: {
+          servo_config.pid_position.ki = config_.vel_integrator_gain;
+          break;
+        }
+        case CONFIG_CURRENT_CTRL_BW: {
+          servo_config.pid_dq_hz = config_.current_ctrl_bw;
+          break;
+        }
+        case CONFIG_ANTICOGGING_ENABLE: {
+          motor.cogging_dq_scale = config_.anticogging_enable ? 1.0f : 0.0f;
+          break;
+        }
+        case CONFIG_TARGET_VELOCITY_WINDOW: {
+          servo_config.fault_velocity_error = config_.target_velocity_window;
+          break;
+        }
+        case CONFIG_TARGET_POSITION_WINDOW: {
+          servo_config.fault_position_error = config_.target_position_window;
+          break;
+        }
+        case CONFIG_TORQUE_RAMP_RATE: {
+          servo_config.max_current_desired_rate = config_.torque_ramp_rate;
+          break;
+        }
+        case CONFIG_VELOCITY_RAMP_RATE:
+        case CONFIG_PROFILE_ACCEL:
+        case CONFIG_PROFILE_DECEL: {
+          servo_config.default_accel_limit = config_.velocity_ramp_rate;
+          break;
+        }
+        case CONFIG_PROFILE_VELOCITY: {
+          servo_config.default_velocity_limit = config_.profile_velocity;
+          break;
+        }
+        case CONFIG_PROTECT_OVER_VOLTAGE: {
+          servo_config.max_voltage = config_.protect_over_voltage;
+          break;
+        }
+        case CONFIG_PROTECT_OVER_CURRENT: {
+          servo_config.max_current_A = config_.protect_over_current;
+          break;
+        }
+        case CONFIG_PROTECT_I_BUS_MAX: {
+          servo_config.max_regen_power_W = config_.protect_i_bus_max;
+          break;
+        }
+        case CONFIG_NODE_ID: {
+          if (multiplex_protocol_ != nullptr &&
+              config_.node_id >= 1 && config_.node_id <= 126) {
+            multiplex_protocol_->config()->id = config_.node_id;
+          }
+          break;
+        }
+        case CONFIG_ENCODER_DIR: {
+          if (position_config != nullptr) {
+            position_config->output.sign = config_.encoder_dir;
+          }
+          break;
+        }
+        case CONFIG_ENCODER_OFFSET: {
+          if (position_config != nullptr) {
+            position_config->output.offset = config_.encoder_offset;
+          }
+          break;
+        }
+        default: { break; }
+      }
+    }
+
+    if (index == CONFIG_CAN_BAUDRATE && fdcan_ != nullptr &&
+        config_.can_baudrate > 0) {
+      fdcan_->SetFastBitrate(config_.can_baudrate);
+    }
+  }
+
+  bool SetConfigRaw(uint32_t index, uint32_t raw_value) {
+    switch (index) {
+      case CONFIG_INVERT_MOTOR_DIR: config_.invert_motor_dir = ToInt32(raw_value); break;
+      case CONFIG_INERTIA: config_.inertia = ToFloat(raw_value); break;
+      case CONFIG_TORQUE_CONSTANT: config_.torque_constant = ToFloat(raw_value); break;
+      case CONFIG_MOTOR_POLE_PAIRS: config_.motor_pole_pairs = ToInt32(raw_value); break;
+      case CONFIG_MOTOR_PHASE_RESISTANCE: config_.motor_phase_resistance = ToFloat(raw_value); break;
+      case CONFIG_MOTOR_PHASE_INDUCTANCE: config_.motor_phase_inductance = ToFloat(raw_value); break;
+      case CONFIG_CURRENT_LIMIT: config_.current_limit = ToFloat(raw_value); break;
+      case CONFIG_VELOCITY_LIMIT: config_.velocity_limit = ToFloat(raw_value); break;
+      case CONFIG_CALIB_CURRENT: config_.calib_current = ToFloat(raw_value); break;
+      case CONFIG_CALIB_VOLTAGE: config_.calib_voltage = ToFloat(raw_value); break;
+      case CONFIG_CONTROL_MODE: config_.control_mode = ToInt32(raw_value); break;
+      case CONFIG_POS_GAIN: config_.pos_gain = ToFloat(raw_value); break;
+      case CONFIG_VEL_GAIN: config_.vel_gain = ToFloat(raw_value); break;
+      case CONFIG_VEL_INTEGRATOR_GAIN: config_.vel_integrator_gain = ToFloat(raw_value); break;
+      case CONFIG_CURRENT_CTRL_BW: config_.current_ctrl_bw = ToFloat(raw_value); break;
+      case CONFIG_ANTICOGGING_ENABLE: config_.anticogging_enable = ToInt32(raw_value); break;
+      case CONFIG_SYNC_TARGET_ENABLE: config_.sync_target_enable = ToInt32(raw_value); break;
+      case CONFIG_TARGET_VELOCITY_WINDOW: config_.target_velocity_window = ToFloat(raw_value); break;
+      case CONFIG_TARGET_POSITION_WINDOW: config_.target_position_window = ToFloat(raw_value); break;
+      case CONFIG_TORQUE_RAMP_RATE: config_.torque_ramp_rate = ToFloat(raw_value); break;
+      case CONFIG_VELOCITY_RAMP_RATE: config_.velocity_ramp_rate = ToFloat(raw_value); break;
+      case CONFIG_POSITION_FILTER_BW: config_.position_filter_bw = ToFloat(raw_value); break;
+      case CONFIG_PROFILE_VELOCITY: config_.profile_velocity = ToFloat(raw_value); break;
+      case CONFIG_PROFILE_ACCEL: config_.profile_accel = ToFloat(raw_value); break;
+      case CONFIG_PROFILE_DECEL: config_.profile_decel = ToFloat(raw_value); break;
+      case CONFIG_PROTECT_UNDER_VOLTAGE: config_.protect_under_voltage = ToFloat(raw_value); break;
+      case CONFIG_PROTECT_OVER_VOLTAGE: config_.protect_over_voltage = ToFloat(raw_value); break;
+      case CONFIG_PROTECT_OVER_CURRENT: config_.protect_over_current = ToFloat(raw_value); break;
+      case CONFIG_PROTECT_I_BUS_MAX: config_.protect_i_bus_max = ToFloat(raw_value); break;
+      case CONFIG_NODE_ID: config_.node_id = ToInt32(raw_value); break;
+      case CONFIG_CAN_BAUDRATE: {
+        config_.can_baudrate = ToInt32(raw_value);
+        if (config_.can_baudrate <= 0) { return false; }
+        break;
+      }
+      case CONFIG_HEARTBEAT_CONSUMER_MS: config_.heartbeat_consumer_ms = ToInt32(raw_value); break;
+      case CONFIG_HEARTBEAT_PRODUCER_MS: config_.heartbeat_producer_ms = ToInt32(raw_value); break;
+      case CONFIG_CALIB_VALID: config_.calib_valid = ToInt32(raw_value); break;
+      case CONFIG_ENCODER_DIR: config_.encoder_dir = ToInt32(raw_value); break;
+      case CONFIG_ENCODER_OFFSET: config_.encoder_offset = ToInt32(raw_value); break;
+      case CONFIG_OFFSET_LUT: config_.offset_lut = ToInt32(raw_value); break;
+      default: return false;
+    }
+
+    ApplyConfigSideEffects(index);
+    return true;
+  }
+
+  bool GetConfigRaw(uint32_t index, uint32_t *raw_value) const {
+    switch (index) {
+      case CONFIG_INVERT_MOTOR_DIR: *raw_value = ToRaw(config_.invert_motor_dir); break;
+      case CONFIG_INERTIA: *raw_value = ToRaw(config_.inertia); break;
+      case CONFIG_TORQUE_CONSTANT: *raw_value = ToRaw(config_.torque_constant); break;
+      case CONFIG_MOTOR_POLE_PAIRS: *raw_value = ToRaw(config_.motor_pole_pairs); break;
+      case CONFIG_MOTOR_PHASE_RESISTANCE: *raw_value = ToRaw(config_.motor_phase_resistance); break;
+      case CONFIG_MOTOR_PHASE_INDUCTANCE: *raw_value = ToRaw(config_.motor_phase_inductance); break;
+      case CONFIG_CURRENT_LIMIT: *raw_value = ToRaw(config_.current_limit); break;
+      case CONFIG_VELOCITY_LIMIT: *raw_value = ToRaw(config_.velocity_limit); break;
+      case CONFIG_CALIB_CURRENT: *raw_value = ToRaw(config_.calib_current); break;
+      case CONFIG_CALIB_VOLTAGE: *raw_value = ToRaw(config_.calib_voltage); break;
+      case CONFIG_CONTROL_MODE: *raw_value = ToRaw(config_.control_mode); break;
+      case CONFIG_POS_GAIN: *raw_value = ToRaw(config_.pos_gain); break;
+      case CONFIG_VEL_GAIN: *raw_value = ToRaw(config_.vel_gain); break;
+      case CONFIG_VEL_INTEGRATOR_GAIN: *raw_value = ToRaw(config_.vel_integrator_gain); break;
+      case CONFIG_CURRENT_CTRL_BW: *raw_value = ToRaw(config_.current_ctrl_bw); break;
+      case CONFIG_ANTICOGGING_ENABLE: *raw_value = ToRaw(config_.anticogging_enable); break;
+      case CONFIG_SYNC_TARGET_ENABLE: *raw_value = ToRaw(config_.sync_target_enable); break;
+      case CONFIG_TARGET_VELOCITY_WINDOW: *raw_value = ToRaw(config_.target_velocity_window); break;
+      case CONFIG_TARGET_POSITION_WINDOW: *raw_value = ToRaw(config_.target_position_window); break;
+      case CONFIG_TORQUE_RAMP_RATE: *raw_value = ToRaw(config_.torque_ramp_rate); break;
+      case CONFIG_VELOCITY_RAMP_RATE: *raw_value = ToRaw(config_.velocity_ramp_rate); break;
+      case CONFIG_POSITION_FILTER_BW: *raw_value = ToRaw(config_.position_filter_bw); break;
+      case CONFIG_PROFILE_VELOCITY: *raw_value = ToRaw(config_.profile_velocity); break;
+      case CONFIG_PROFILE_ACCEL: *raw_value = ToRaw(config_.profile_accel); break;
+      case CONFIG_PROFILE_DECEL: *raw_value = ToRaw(config_.profile_decel); break;
+      case CONFIG_PROTECT_UNDER_VOLTAGE: *raw_value = ToRaw(config_.protect_under_voltage); break;
+      case CONFIG_PROTECT_OVER_VOLTAGE: *raw_value = ToRaw(config_.protect_over_voltage); break;
+      case CONFIG_PROTECT_OVER_CURRENT: *raw_value = ToRaw(config_.protect_over_current); break;
+      case CONFIG_PROTECT_I_BUS_MAX: *raw_value = ToRaw(config_.protect_i_bus_max); break;
+      case CONFIG_NODE_ID: *raw_value = ToRaw(config_.node_id); break;
+      case CONFIG_CAN_BAUDRATE: *raw_value = ToRaw(config_.can_baudrate); break;
+      case CONFIG_HEARTBEAT_CONSUMER_MS: *raw_value = ToRaw(config_.heartbeat_consumer_ms); break;
+      case CONFIG_HEARTBEAT_PRODUCER_MS: *raw_value = ToRaw(config_.heartbeat_producer_ms); break;
+      case CONFIG_CALIB_VALID: *raw_value = ToRaw(config_.calib_valid); break;
+      case CONFIG_ENCODER_DIR: *raw_value = ToRaw(config_.encoder_dir); break;
+      case CONFIG_ENCODER_OFFSET: *raw_value = ToRaw(config_.encoder_offset); break;
+      case CONFIG_OFFSET_LUT: *raw_value = ToRaw(config_.offset_lut); break;
+      default: return false;
+    }
+    return true;
   }
 
   bool HandleFrame(uint32_t can_id, int dlc, const char *data) {
@@ -587,8 +835,44 @@ private:
   }
 
   bool HandleGetValue2(int dlc, const char *data) { return true; }
-  bool HandleSetConfig(int dlc, const char *data) { return false; }
-  bool HandleGetConfig(int dlc, const char *data) { return false; }
+  bool HandleSetConfig(int dlc, const char *data) {
+    uint32_t index = 0;
+    uint32_t raw_value = 0;
+    std::memcpy(&index, data, sizeof(index));
+    std::memcpy(&raw_value, data + sizeof(index), sizeof(raw_value));
+
+    if (!SetConfigRaw(index, raw_value)) {
+      return false;
+    }
+
+    char reply[8] = {0};
+    std::memcpy(reply, &index, sizeof(index));
+    std::memcpy(reply + sizeof(index), &raw_value, sizeof(raw_value));
+    SendFrame(Send << DirOffset |
+                  (multiplex_protocol_->config()->id << NodeOffset) |
+                  CAN_CMD_SET_CONFIG,
+              8, reply);
+    return true;
+  }
+
+  bool HandleGetConfig(int dlc, const char *data) {
+    uint32_t index = 0;
+    uint32_t raw_value = 0;
+    std::memcpy(&index, data, sizeof(index));
+
+    if (!GetConfigRaw(index, &raw_value)) {
+      return false;
+    }
+
+    char reply[8] = {0};
+    std::memcpy(reply, &index, sizeof(index));
+    std::memcpy(reply + sizeof(index), &raw_value, sizeof(raw_value));
+    SendFrame(Send << DirOffset |
+                  (multiplex_protocol_->config()->id << NodeOffset) |
+                  CAN_CMD_GET_CONFIG,
+              8, reply);
+    return true;
+  }
   bool HandleSaveAllConfig(int dlc, const char *data) { return false; }
   bool HandleResetAllConfig(int dlc, const char *data) { return false; }
   bool HandleHeartbeat(int dlc, const char *data) { return true; }

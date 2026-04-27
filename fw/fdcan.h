@@ -113,6 +113,9 @@ class FDCan {
 
   void ConfigureFilters(const FilterConfig&);
 
+  void SetFastBitrate(int);
+  int fast_bitrate() const;
+
   void Send(uint32_t dest_id,
             std::string_view data,
             const SendOptions& = SendOptions());

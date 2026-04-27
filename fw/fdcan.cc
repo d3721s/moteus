@@ -100,6 +100,19 @@ void FDCan::ConfigureFilters(const FilterConfig& filters) {
   Init();
 }
 
+void FDCan::SetFastBitrate(int bitrate) {
+  if (bitrate <= 0 || options_.fast_bitrate == bitrate) {
+    return;
+  }
+
+  options_.fast_bitrate = bitrate;
+  Init();
+}
+
+int FDCan::fast_bitrate() const {
+  return options_.fast_bitrate;
+}
+
 void FDCan::Init() {
   const auto& options = options_;
 
