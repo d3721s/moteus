@@ -543,7 +543,7 @@ private:
 
     const auto &s = bldc_servo_->status();
     const auto &mp = bldc_servo_->motor_position();
-#warning "单位需确定"
+#pragma message("单位需确定")
     // velocity: rev/s × 100 → int16
     const int16_t vel_i16 = static_cast<int16_t>(s.velocity * 100.0f);
     // position: rev × 100 → int16
