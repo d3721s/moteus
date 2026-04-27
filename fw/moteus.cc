@@ -365,7 +365,7 @@ int main(void) {
       moteus_controller.PollMillisecond();
       board_debug.PollMillisecond();
       system_info.SetCanResetCount(multi_transport.can_reset_count());
-      custom_protocol.PollMillisecond();
+      // custom_protocol.PollMillisecond();
       timer.AdvanceMsSinceBoot();
 
       old_time += 1000;
