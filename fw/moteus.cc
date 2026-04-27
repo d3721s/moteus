@@ -29,7 +29,7 @@
 #include "fw/board_debug.h"
 #include "fw/clock_manager.h"
 #include "fw/firmware_info.h"
-// #include "fw/git_info.h"
+#include "fw/git_info.h"
 #include "fw/millisecond_timer.h"
 #include "fw/moteus_controller.h"
 #include "fw/moteus_hw.h"
@@ -268,8 +268,8 @@ int main(void) {
   fdcan_micro_server.SetCustomHandler(
       CustomProtocol::CallbackTrampoline, &custom_protocol);
 
-  // GitInfo git_info;
-  // telemetry_manager.Register("git", &git_info);
+  GitInfo git_info;
+  telemetry_manager.Register("git", &git_info);
 
   // We always want to update our filters at least once.
   uint8_t old_multiplex_id = 255;
