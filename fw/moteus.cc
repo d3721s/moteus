@@ -335,7 +335,7 @@ int main(void) {
 
   persistent_config.Load();
 
-  // custom_protocol.Init();
+  custom_protocol.Init();
 
   moteus_controller.Start();
   command_manager.AsyncStart();
