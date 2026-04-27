@@ -265,9 +265,7 @@ class Drv8323::Impl {
       return (val ? 1 : 0) << pos;
     };
 
-    const bool drv8323 =
-        (g_measured_hw_family == 0 && g_measured_hw_rev <= 6) ||
-        (g_measured_hw_family == 1);
+    const bool drv8323 = 0;
 
     constexpr uint16_t idrivep_table_drv8323[] = {
       10, 30, 60, 80, 120, 140, 170, 190,
