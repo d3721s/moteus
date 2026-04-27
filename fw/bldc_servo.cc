@@ -997,9 +997,9 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
   //
   // Returns the SinCos for use by ISR_DoControl.
   SinCos ISR_CalculateCurrentState(bool use_synthetic_theta) MOTEUS_CCM_ATTRIBUTE {
-    status_.cur1_A = -(status_.adc_cur1_raw - status_.adc_cur1_offset) * adc_scale_;
+    status_.cur1_A = (status_.adc_cur1_raw - status_.adc_cur1_offset) * adc_scale_;
     status_.cur2_A = (status_.adc_cur2_raw - status_.adc_cur2_offset) * adc_scale_;
-    status_.cur3_A = -(status_.adc_cur3_raw - status_.adc_cur3_offset) * adc_scale_;
+    status_.cur3_A = (status_.adc_cur3_raw - status_.adc_cur3_offset) * adc_scale_;
     if (motor_.phase_invert) {
       std::swap(status_.cur2_A, status_.cur3_A);
     }
