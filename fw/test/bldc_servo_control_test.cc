@@ -33,24 +33,13 @@ struct Context : public BldcServoControl<Context> {
   MotorPosition::Status position_;
   BldcServoMotor motor_;
 
-  SimplePI::Config pid_dq_config;
   PID::Config pid_position_config;
 
-  SimplePI pid_d_{&pid_dq_config, &status_.pid_d};
-  SimplePI pid_q_{&pid_dq_config, &status_.pid_q};
+  SimplePI pid_d_{&pid_d_config_, &status_.pid_d};
+  SimplePI pid_q_{&pid_q_config_, &status_.pid_q};
   PID pid_position_{&pid_position_config, &status_.pid_position};
 
   RateConfig rate_config_{30000, 15000};
-
-  float torque_constant_ = 0.1f;
-  float v_per_hz_ = 0.0f;
-  float flux_brake_min_voltage_ = 0.0f;
-  float derate_temperature_ = 50.0f;
-  float motor_derate_temperature_ = 80.0f;
-  uint8_t isr_motor_position_epoch_ = 0;
-  uint32_t pwm_counts_ = 4000;
-  float old_d_V_ = 0.0f;
-  float old_q_V_ = 0.0f;
 
   // HW mock state for verification.
   int pwm_control_count = 0;
@@ -116,10 +105,17 @@ struct Context : public BldcServoControl<Context> {
   }
 
   Context() {
+    // Non-default base-class state for this fixture.
+    torque_constant_ = 0.1f;
+    derate_temperature_ = 50.0f;
+    motor_derate_temperature_ = 80.0f;
+
     position_config_.position_min = NaN;
     position_config_.position_max = NaN;
-    pid_dq_config.kp = 0.005f;
-    pid_dq_config.ki = 30.0f;
+    motor_.resistance_ohm = 0.048f;
+    motor_.inductance_d_H = 8e-6f;
+    motor_.inductance_q_H = 8e-6f;
+    UpdateDerivedMotorConstants();
     pid_position_config.kp = 4.0f;
     pid_position_config.ki = 1.0f;
     pid_position_config.kd = 0.05f;
@@ -647,6 +643,47 @@ BOOST_AUTO_TEST_CASE(BldcServoControlDoCurrentLimits) {
   BOOST_TEST(ctx.control_.i_q_A <= ctx.config_.max_current_A);
 }
 
+BOOST_AUTO_TEST_CASE(BldcServoControlDoCurrentFieldWeakening) {
+  Context ctx;
+  ctx.status_.filt_bus_V = 24.0f;
+  ctx.status_.filt_1ms_bus_V = 24.0f;
+  ctx.status_.filt_fet_temp_C = 25.0f;
+  ctx.status_.max_power_W = 500.0f;
+  ctx.position_.epoch = 0;
+  ctx.isr_motor_position_epoch_ = 0;
+  ctx.position_.theta_valid = true;
+  ctx.motor_.poles = 14;
+  // Kv chosen so that id_char = lambda_m / L_d ≈ 5.0
+  ctx.motor_.Kv = 1575.2247f;
+  ctx.motor_.resistance_ohm = 0.1f;
+  ctx.motor_.inductance_d_H = 0.0001f;
+  ctx.motor_.inductance_q_H = 0.0001f;
+  ctx.config_.max_current_A = 40.0f;
+  ctx.config_.max_velocity = 200.0f;
+  ctx.config_.max_velocity_derate = 20.0f;
+  ctx.config_.fw.enable = true;
+  ctx.config_.fw.max_current_ratio = 0.5f;
+  ctx.config_.fw.bandwidth_hz = 100.0f;
+  ctx.config_.fw.modulation_margin = 0.05f;
+  ctx.UpdateDerivedMotorConstants();
+  ctx.UpdateFieldWeakeningIdChar();
+  ctx.motor_position_config_val.output.sign = 1;
+
+  // Set speed above base velocity.
+  ctx.status_.motor_base_velocity = 50.0f;
+  ctx.position_.velocity = 80.0f;
+  ctx.status_.control_velocity = 80.0f;
+
+  SinCos sc;
+  sc.s = 0.0f;
+  sc.c = 1.0f;
+
+  ctx.ISR_DoCurrent(sc, 0.0f, 5.0f, 0.0f, false);
+
+  // Field weakening should inject negative d-axis current.
+  BOOST_TEST(ctx.status_.fw.id_A < 0.0f);
+}
+
 BOOST_AUTO_TEST_CASE(BldcServoControlDoPosition) {
   Context ctx;
   ctx.status_.filt_bus_V = 24.0f;
@@ -957,4 +994,47 @@ BOOST_AUTO_TEST_CASE(BldcServoControlDoControl) {
   ctx.ISR_DoControl(sc, &data);
   BOOST_CHECK(ctx.status_.mode == BldcServoMode::kFault);
   BOOST_CHECK(ctx.status_.fault == errc::kMotorDriverFault);
+}
+
+BOOST_AUTO_TEST_CASE(BldcServoControlDynamicInductance) {
+  Context ctx;
+  ctx.status_.filt_bus_V = 24.0f;
+  ctx.status_.filt_1ms_bus_V = 24.0f;
+  ctx.status_.filt_fet_temp_C = 25.0f;
+  ctx.status_.max_power_W = 500.0f;
+  ctx.position_.epoch = 0;
+  ctx.isr_motor_position_epoch_ = 0;
+  ctx.position_.theta_valid = true;
+  ctx.motor_.poles = 14;
+  ctx.motor_.resistance_ohm = 0.1f;
+  ctx.motor_.inductance_d_H = 20e-6f;
+  ctx.motor_.inductance_d_scale = -2e-6f;  // H/A
+  ctx.config_.max_current_A = 40.0f;
+  ctx.config_.max_velocity = 100.0f;
+  ctx.config_.max_velocity_derate = 20.0f;
+  ctx.motor_position_config_val.output.sign = 1;
+  ctx.UpdateDerivedMotorConstants();
+
+  SinCos sc;
+  sc.s = 0.0f;
+  sc.c = 1.0f;
+
+  // Negative i_d should increase effective inductance (scale is negative,
+  // min(i_d,0) is negative, so product is positive).
+  ctx.ISR_DoCurrent(sc, -10.0f, 0.0f, 0.0f, false);
+  BOOST_CHECK(ctx.status_.mode != kFault);
+  // effective_L = 20e-6 + (-2e-6)*(-10) = 40e-6
+  BOOST_TEST(ctx.status_.inductance_d_H == 40e-6f, tt::tolerance(1e-9f));
+
+  // Positive i_d should use base inductance (min(i_d,0) = 0).
+  ctx.ISR_DoCurrent(sc, 5.0f, 0.0f, 0.0f, false);
+  BOOST_CHECK(ctx.status_.mode != kFault);
+  BOOST_TEST(ctx.status_.inductance_d_H == 20e-6f, tt::tolerance(1e-9f));
+
+  // Zero scale should always yield base inductance.
+  ctx.motor_.inductance_d_scale = 0.0f;
+  ctx.UpdateDerivedMotorConstants();
+  ctx.ISR_DoCurrent(sc, -10.0f, 0.0f, 0.0f, false);
+  BOOST_CHECK(ctx.status_.mode != kFault);
+  BOOST_TEST(ctx.status_.inductance_d_H == 20e-6f, tt::tolerance(1e-9f));
 }

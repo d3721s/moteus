@@ -17,6 +17,7 @@
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <vector>
 
 #include "mjlib/micro/test/persistent_config_fixture.h"
@@ -25,6 +26,7 @@
 #include "fw/bldc_servo_position.h"
 #include "fw/bldc_servo_structs.h"
 #include "fw/motor_position.h"
+#include "fw/test/motor_model.h"
 #include "fw/test/spmsm_motor_simulator.h"
 
 namespace moteus {
@@ -71,6 +73,7 @@ inline std::pair<float, float> FindDCurrentRange(float voltage, float resistance
 
 class SimulatedFixture;
 
+
 // A simulation context that integrates BldcServoControl with a SPMSM
 // motor model.  Follows the CRTP pattern from
 // bldc_servo_control_test.cc.
@@ -85,24 +88,15 @@ class SimulationContext : public BldcServoControl<SimulationContext> {
   BldcServoMotor motor_;
   MotorPosition::Config motor_position_config_;
 
-  SimplePI::Config pid_dq_config;
   PID::Config pid_position_config;
 
-  SimplePI pid_d_{&pid_dq_config, &status_.pid_d};
-  SimplePI pid_q_{&pid_dq_config, &status_.pid_q};
+  SimplePI pid_d_{&pid_d_config_, &status_.pid_d};
+  SimplePI pid_q_{&pid_q_config_, &status_.pid_q};
   PID pid_position_{&pid_position_config, &status_.pid_position};
 
   RateConfig rate_config_{30000, 15000};
 
-  float torque_constant_ = 0.0f;  // Set during initialization
-  float v_per_hz_ = 0.0f;
-  float flux_brake_min_voltage_ = 100.0f;  // Effectively disabled
-  float derate_temperature_ = 80.0f;
-  float motor_derate_temperature_ = 100.0f;
-  uint8_t isr_motor_position_epoch_ = 0;
-  uint32_t pwm_counts_ = 4000;
-  float old_d_V_ = 0.0f;
-  float old_q_V_ = 0.0f;
+
 
   ////////////////////////////////////////////////////////////////
   // Test state
@@ -126,6 +120,9 @@ class SimulationContext : public BldcServoControl<SimulationContext> {
   // Motor simulator
   SpmsmMotorSimulator motor_sim_;
 
+  // Optional motor model (stored for lifetime management)
+  std::shared_ptr<MotorModel> motor_model_;
+
   // Simulated encoder counts per revolution (14-bit)
   static constexpr uint32_t kEncoderCpr = 16384;
 
@@ -144,10 +141,29 @@ class SimulationContext : public BldcServoControl<SimulationContext> {
   // Simulated bus voltage
   float bus_voltage_ = 24.0f;
 
+  // Dynamic bus model parameters.
+  // When bus_resistance_ohm > 0, the bus voltage responds to motor current.
+  //   R > 0, C = 0: algebraic model (V = V_source - R * i_bus)
+  //   R > 0, C > 0: dynamic RC model (C * dV/dt = (V_source - V)/R - i_bus)
+  //   R = 0: ideal source (default, no update)
+  float bus_source_voltage_ = 0.0f;
+  float bus_resistance_ohm_ = 0.0f;
+  float bus_capacitance_F_ = 0.0f;
+
   // External load torque (Nm)
   float external_torque_ = 0.0f;
 
-  SimulationContext() {
+  explicit SimulationContext(
+      std::shared_ptr<MotorModel> model = nullptr)
+      : motor_model_(std::move(model)) {
+    // Non-default base-class state for this fixture.
+    flux_brake_min_voltage_ = 100.0f;  // Effectively disabled
+    derate_temperature_ = 80.0f;
+    motor_derate_temperature_ = 100.0f;
+
+    // Initialize control filters from base class
+    InitControlFilters(rate_config_.pwm_rate_hz);
+
     // Initialize MJ5208-like motor parameters for firmware (motor_) and
     // simulator (motor_sim_) from the same source.
     const auto& mp = Mj5208Params();
@@ -155,35 +171,40 @@ class SimulationContext : public BldcServoControl<SimulationContext> {
     // Firmware motor model
     motor_.poles = mp.kPolePairs * 2;  // 14 poles
     motor_.resistance_ohm = mp.kR;
+    motor_.inductance_d_H = mp.kL;
+    motor_.inductance_q_H = mp.kL;
     motor_.Kv = mp.kKv;
     motor_.rotation_current_cutoff_A = mp.kRotationCurrentCutoff;
     motor_.rotation_current_scale = mp.kRotationCurrentScale;
     motor_.rotation_torque_scale = mp.kRotationTorqueScale;
     torque_constant_ = mp.kKt;
-    v_per_hz_ = 0.5f * 60.0f / mp.kKv;  // V/(rev/s), matches firmware
 
-    // Motor simulator (uses Mj5208Params defaults, but explicit for clarity)
-    SpmsmMotorSimulator::Params sim_params;
-    sim_params.lambda_m = mp.kLambdaM;
-    sim_params.Kt = mp.kKt;
-    sim_params.R = mp.kR;
-    sim_params.L = mp.kL;
-    sim_params.J = mp.kJ;
-    sim_params.B = mp.kB;
-    sim_params.pole_pairs = mp.kPolePairs;
-    sim_params.rotation_current_cutoff = mp.kRotationCurrentCutoff;
-    sim_params.rotation_current_scale = mp.kRotationCurrentScale;
-    sim_params.rotation_torque_scale = mp.kRotationTorqueScale;
-    motor_sim_ = SpmsmMotorSimulator(sim_params);
+    // Motor simulator: use provided model or default simple model.
+    if (motor_model_) {
+      motor_sim_ = SpmsmMotorSimulator(motor_model_);
+    } else {
+      SpmsmMotorSimulator::Params sim_params;
+      sim_params.lambda_m = mp.kLambdaM;
+      sim_params.Kt = mp.kKt;
+      sim_params.R = mp.kR;
+      sim_params.L = mp.kL;
+      sim_params.J = mp.kJ;
+      sim_params.B = mp.kB;
+      sim_params.pole_pairs = mp.kPolePairs;
+      sim_params.rotation_current_cutoff = mp.kRotationCurrentCutoff;
+      sim_params.rotation_current_scale = mp.kRotationCurrentScale;
+      sim_params.rotation_torque_scale = mp.kRotationTorqueScale;
+      motor_sim_ = SpmsmMotorSimulator(sim_params);
+    }
 
     // Set up position limits (wide range)
     position_config_.position_min = kNaN;
     position_config_.position_max = kNaN;
 
-    // Set up PID parameters (matched to real hardware at 400Hz bandwidth)
-    pid_dq_config.kp = 0.065f;
-    pid_dq_config.ki = 120.0f;
-    pid_dq_config.max_desired_rate = 10000.0f;
+    // Current control bandwidth — UpdateDerivedMotorConstants() computes
+    // kp/ki from this and the motor inductance/resistance.
+    config_.pid_dq_hz = 400.0f;
+    UpdateDerivedMotorConstants();
 
     pid_position_config.kp = 4.0f;
     pid_position_config.ki = 1.0f;
@@ -194,8 +215,6 @@ class SimulationContext : public BldcServoControl<SimulationContext> {
     config_.max_current_A = 40.0f;
     config_.max_velocity = 100.0f;
     config_.max_velocity_derate = 20.0f;
-    config_.default_velocity_limit = kNaN;
-    config_.default_accel_limit = kNaN;
 
     // Set up motor position configuration
     motor_position_.config()->rotor_to_output_ratio = 1.0f;
@@ -309,6 +328,30 @@ class SimulationContext : public BldcServoControl<SimulationContext> {
     motor_position_.ISR_Update();
     status_.velocity_filt = position_.velocity;
 
+    // 2.5. Update dynamic bus voltage model (if active).
+    //
+    // Runs before ISR_CalculateDerivedQuantities (which filters bus_V)
+    // and ISR_DoControl (which checks bus_V for over-voltage fault).
+    if (bus_resistance_ohm_ > 0.0f) {
+      const auto phase_cur = motor_sim_.phase_currents();
+      const float i_bus = prior_pwm.a * phase_cur.a +
+                          prior_pwm.b * phase_cur.b +
+                          prior_pwm.c * phase_cur.c;
+
+      if (bus_capacitance_F_ > 0.0f) {
+        // Dynamic RC model.
+        const float i_source =
+            (bus_source_voltage_ - bus_voltage_) / bus_resistance_ohm_;
+        bus_voltage_ += (i_source - i_bus) * dt / bus_capacitance_F_;
+      } else {
+        // Algebraic model (no capacitor).
+        bus_voltage_ = bus_source_voltage_ - bus_resistance_ohm_ * i_bus;
+      }
+
+      if (bus_voltage_ < 0.0f) { bus_voltage_ = 0.0f; }
+      status_.bus_V = bus_voltage_;
+    }
+
     // 3. Get phase currents from motor, transform to DQ using encoder theta
     const auto phase_cur = motor_sim_.phase_currents();
     const SinCos sin_cos = ISR_CalculateDerivedQuantities(
@@ -401,6 +444,11 @@ class SimulationContext : public BldcServoControl<SimulationContext> {
     external_torque_ = 0.0f;
     last_pwm = Vec3{0.5f, 0.5f, 0.5f};  // Neutral PWM
 
+    // Reset bus voltage to source if dynamic model is active.
+    if (bus_resistance_ohm_ > 0.0f) {
+      SetBusVoltage(bus_source_voltage_);
+    }
+
     // Reset control state to avoid stale values affecting power limiting.
     // Initialize control_.d_V and control_.q_V to small non-zero values to
     // avoid division by zero in power limiting code (scaled_power / old_V).
@@ -451,6 +499,19 @@ class SimulationContext : public BldcServoControl<SimulationContext> {
     status_.filt_bus_V = voltage;
     status_.filt_1ms_bus_V = voltage;
     status_.bus_V = voltage;
+  }
+
+  // Enable dynamic bus voltage model.
+  //
+  // Models a voltage source (source_V) behind a series resistance
+  // (resistance_ohm) with an optional bus capacitor (capacitance_F).
+  // The bus voltage will respond to regenerative energy from the motor.
+  void SetBusModel(float source_V, float resistance_ohm,
+                   float capacitance_F = 0.0f) {
+    bus_source_voltage_ = source_V;
+    bus_resistance_ohm_ = resistance_ohm;
+    bus_capacitance_F_ = capacitance_F;
+    SetBusVoltage(source_V);
   }
 
   // Sample a value over multiple steps and return statistics.
@@ -510,11 +571,10 @@ class SimulationContext : public BldcServoControl<SimulationContext> {
     if (status_.mode != cmd->mode) {
       ISR_MaybeChangeMode(cmd);
 
-      // Complete calibration immediately (simulation bypass)
-      if (status_.mode == kEnabling) {
-        status_.mode = kCalibrationComplete;
-
-        // Now switch to the commanded mode
+      // Complete calibration immediately (simulation bypass).
+      // StartCalibrating() already set mode to kCalibrationComplete,
+      // so transition from there to the commanded mode.
+      if (status_.mode == kCalibrationComplete) {
         ISR_MaybeChangeMode(cmd);
       }
     }

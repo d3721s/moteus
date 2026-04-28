@@ -34,11 +34,15 @@ using namespace moteus::test;
 // Tests: 0.0, -0.2, 0.3 rev
 // Tolerance: 0.05 rev
 // setup_fn is called before each position subtest to reset/configure state.
+//
+// Verifies ISR-reported, encoder, and physics position all settle at the
+// target, and that encoder and physics agree (with output.sign applied).
 template <typename SetupFn>
 void RunPositionHoldTest(
     SimulationContext& ctx, const std::string& label,
     SetupFn setup_fn) {
   constexpr float kTolerance = 0.05f;
+  constexpr float kConsistencyTolerance = 0.02f;
 
   for (const float position : {0.0f, -0.2f, 0.3f}) {
     setup_fn();
@@ -47,11 +51,36 @@ void RunPositionHoldTest(
     ctx.Command(&cmd);
     ctx.RunSimulation(&cmd, 1.0f);
 
+    const float output_sign = ctx.motor_position_config_.output.sign;
+    const float status_pos = ctx.status_.position;
+    const float encoder_pos = ctx.position_.position;
+    const float physics_pos = ctx.motor_sim_.position_rev() * output_sign;
+
     BOOST_CHECK_MESSAGE(
-        std::abs(ctx.status_.position - position) < kTolerance,
-        label << " position hold " << position << ": got " << ctx.status_.position
-            << ", error " << std::abs(ctx.status_.position - position)
+        std::abs(status_pos - position) < kTolerance,
+        label << " status position hold " << position
+            << ": got " << status_pos
+            << ", error " << std::abs(status_pos - position)
             << " > " << kTolerance);
+    BOOST_CHECK_MESSAGE(
+        std::abs(encoder_pos - position) < kTolerance,
+        label << " encoder position hold " << position
+            << ": got " << encoder_pos
+            << ", error " << std::abs(encoder_pos - position)
+            << " > " << kTolerance);
+    BOOST_CHECK_MESSAGE(
+        std::abs(physics_pos - position) < kTolerance,
+        label << " physics position hold " << position
+            << ": got " << physics_pos
+            << ", error " << std::abs(physics_pos - position)
+            << " > " << kTolerance);
+    BOOST_CHECK_MESSAGE(
+        std::abs(encoder_pos - physics_pos) < kConsistencyTolerance,
+        label << " encoder/physics mismatch at position hold " << position
+            << ": encoder " << encoder_pos
+            << ", physics*sign " << physics_pos
+            << ", delta " << std::abs(encoder_pos - physics_pos)
+            << " > " << kConsistencyTolerance);
   }
 }
 
@@ -59,11 +88,20 @@ void RunPositionHoldTest(
 // Tests: 0, -1.5, 3.0, 10.0, -5.0 rev/s
 // Base tolerance: 0.35 rev/s (scaled by tolerance_scale)
 // setup_fn is called before each velocity subtest to reset/configure state.
+//
+// Checks three independent velocity signals against the command:
+//   status_.velocity     - ISR-reported velocity (may be command echo in
+//                          synthetic_theta mode, so not sufficient alone).
+//   position_.velocity   - encoder PLL output, in the output frame.
+//   motor_sim_ physics   - simulator's rotor velocity scaled by output.sign.
+// Also cross-checks encoder against physics to catch sign / scaling
+// inconsistencies between the two.
 template <typename SetupFn>
 void RunVelocityTrackingTest(
     SimulationContext& ctx, float tolerance_scale, const std::string& label,
     SetupFn setup_fn) {
   const float tolerance = 0.35f * tolerance_scale;
+  const float consistency_tolerance = 0.1f * tolerance_scale;
 
   for (const float velocity : {0.0f, -1.5f, 3.0f, 10.0f, -5.0f}) {
     setup_fn();
@@ -74,14 +112,49 @@ void RunVelocityTrackingTest(
     ctx.Command(&cmd);
     ctx.RunSimulation(&cmd, 1.5f);
 
-    const auto vel_stats = ctx.SampleValue(&cmd, 1000,
-        [&] { return ctx.status_.velocity; });
+    const float output_sign = ctx.motor_position_config_.output.sign;
+    std::vector<float> status_samples, encoder_samples, physics_samples;
+    constexpr int kSteps = 1000;
+    status_samples.reserve(kSteps);
+    encoder_samples.reserve(kSteps);
+    physics_samples.reserve(kSteps);
+    for (int i = 0; i < kSteps; i++) {
+      ctx.StepSimulation(&cmd);
+      status_samples.push_back(ctx.status_.velocity);
+      encoder_samples.push_back(ctx.position_.velocity);
+      physics_samples.push_back(
+          ctx.motor_sim_.velocity_rev_s() * output_sign);
+    }
+    const auto status_stats = CalcStats(status_samples);
+    const auto encoder_stats = CalcStats(encoder_samples);
+    const auto physics_stats = CalcStats(physics_samples);
 
     BOOST_CHECK_MESSAGE(
-        std::abs(vel_stats.mean - velocity) < tolerance,
-        label << " velocity " << velocity << ": got " << vel_stats.mean
-            << ", error " << std::abs(vel_stats.mean - velocity)
+        std::abs(status_stats.mean - velocity) < tolerance,
+        label << " status velocity " << velocity
+            << ": got " << status_stats.mean
+            << ", error " << std::abs(status_stats.mean - velocity)
             << " > " << tolerance);
+    BOOST_CHECK_MESSAGE(
+        std::abs(encoder_stats.mean - velocity) < tolerance,
+        label << " encoder velocity " << velocity
+            << ": got " << encoder_stats.mean
+            << ", error " << std::abs(encoder_stats.mean - velocity)
+            << " > " << tolerance);
+    BOOST_CHECK_MESSAGE(
+        std::abs(physics_stats.mean - velocity) < tolerance,
+        label << " physics velocity " << velocity
+            << ": got " << physics_stats.mean
+            << ", error " << std::abs(physics_stats.mean - velocity)
+            << " > " << tolerance);
+    BOOST_CHECK_MESSAGE(
+        std::abs(encoder_stats.mean - physics_stats.mean)
+            < consistency_tolerance,
+        label << " encoder/physics mismatch at " << velocity
+            << ": encoder " << encoder_stats.mean
+            << ", physics*sign " << physics_stats.mean
+            << ", delta " << std::abs(encoder_stats.mean - physics_stats.mean)
+            << " > " << consistency_tolerance);
   }
 }
 
@@ -89,11 +162,16 @@ void RunVelocityTrackingTest(
 // Tests: 2.0, 0.5 rev
 // Base tolerance: 0.07 rev (scaled by tolerance_scale)
 // setup_fn is called before each stop position subtest.
+//
+// Checks ISR-reported, encoder-derived, and physics positions to catch
+// synthetic_theta regressions where status_.position echoes the command
+// but the rotor is not actually where it thinks it is.
 template <typename SetupFn>
 void RunStopPositionTest(
     SimulationContext& ctx, float tolerance_scale, const std::string& label,
     SetupFn setup_fn) {
   const float tolerance = 0.07f * tolerance_scale;
+  const float consistency_tolerance = 0.02f * tolerance_scale;
 
   for (const float stop_pos : {2.0f, 0.5f}) {
     setup_fn();
@@ -101,18 +179,54 @@ void RunStopPositionTest(
 
     auto cmd = MakePositionCommand(kNaN, 1.0f, 0.3f);
     cmd.stop_position = stop_pos;
+    cmd.accel_limit = -1.0f;  // Disable; stop_position is incompatible with accel_limit
 
     ctx.Command(&cmd);
     ctx.RunSimulation(&cmd, 3.0f);
 
-    const auto pos_stats = ctx.SampleValue(&cmd, 500,
-        [&] { return ctx.status_.position; });
+    const float output_sign = ctx.motor_position_config_.output.sign;
+    std::vector<float> status_samples, encoder_samples, physics_samples;
+    constexpr int kSteps = 500;
+    status_samples.reserve(kSteps);
+    encoder_samples.reserve(kSteps);
+    physics_samples.reserve(kSteps);
+    for (int i = 0; i < kSteps; i++) {
+      ctx.StepSimulation(&cmd);
+      status_samples.push_back(ctx.status_.position);
+      encoder_samples.push_back(ctx.position_.position);
+      physics_samples.push_back(
+          ctx.motor_sim_.position_rev() * output_sign);
+    }
+    const auto status_stats = CalcStats(status_samples);
+    const auto encoder_stats = CalcStats(encoder_samples);
+    const auto physics_stats = CalcStats(physics_samples);
 
     BOOST_CHECK_MESSAGE(
-        std::abs(pos_stats.mean - stop_pos) < tolerance,
-        label << " stop_position " << stop_pos << ": got " << pos_stats.mean
-            << ", error " << std::abs(pos_stats.mean - stop_pos)
+        std::abs(status_stats.mean - stop_pos) < tolerance,
+        label << " status stop_position " << stop_pos
+            << ": got " << status_stats.mean
+            << ", error " << std::abs(status_stats.mean - stop_pos)
             << " > " << tolerance);
+    BOOST_CHECK_MESSAGE(
+        std::abs(encoder_stats.mean - stop_pos) < tolerance,
+        label << " encoder stop_position " << stop_pos
+            << ": got " << encoder_stats.mean
+            << ", error " << std::abs(encoder_stats.mean - stop_pos)
+            << " > " << tolerance);
+    BOOST_CHECK_MESSAGE(
+        std::abs(physics_stats.mean - stop_pos) < tolerance,
+        label << " physics stop_position " << stop_pos
+            << ": got " << physics_stats.mean
+            << ", error " << std::abs(physics_stats.mean - stop_pos)
+            << " > " << tolerance);
+    BOOST_CHECK_MESSAGE(
+        std::abs(encoder_stats.mean - physics_stats.mean)
+            < consistency_tolerance,
+        label << " encoder/physics mismatch at stop_position " << stop_pos
+            << ": encoder " << encoder_stats.mean
+            << ", physics*sign " << physics_stats.mean
+            << ", delta " << std::abs(encoder_stats.mean - physics_stats.mean)
+            << " > " << consistency_tolerance);
   }
 }
 
@@ -120,31 +234,68 @@ void RunStopPositionTest(
 // Tests: 0.1, 1.0, 2.0 rev
 // Base tolerance: 0.07 rev (scaled by tolerance_scale)
 // setup_fn is called before each limit subtest.
+//
+// Limit enforcement happens in the controller's position pipeline, but we
+// also verify the encoder and physics agree - otherwise a synthetic_theta
+// scaling bug could let the rotor overshoot the limit while the ISR thinks
+// it is still in bounds.
 template <typename SetupFn>
 void RunPositionLimitsTest(
     SimulationContext& ctx, float tolerance_scale, const std::string& label,
     SetupFn setup_fn) {
   const float tolerance = 0.07f * tolerance_scale;
+  const float consistency_tolerance = 0.02f * tolerance_scale;
 
   for (const float limit : {0.1f, 1.0f, 2.0f}) {
     setup_fn();
     ctx.position_config_.position_min = -limit;
     ctx.position_config_.position_max = 10.0f;
 
-    auto cmd = MakePositionCommand(kNaN, -1.5f, 0.3f);  // Move toward negative limit
-    cmd.stop_position = -10.0f;
-    cmd.accel_limit = 30.0f;
+    auto cmd = MakePositionCommand(-10.0f, -1.5f, 0.3f);  // Move toward negative limit
 
     ctx.Command(&cmd);
     ctx.RunSimulation(&cmd, 3.0f);
 
-    const auto pos_stats = ctx.SampleValue(&cmd, 500,
-        [&] { return ctx.status_.position; });
+    const float output_sign = ctx.motor_position_config_.output.sign;
+    std::vector<float> status_samples, encoder_samples, physics_samples;
+    constexpr int kSteps = 500;
+    status_samples.reserve(kSteps);
+    encoder_samples.reserve(kSteps);
+    physics_samples.reserve(kSteps);
+    for (int i = 0; i < kSteps; i++) {
+      ctx.StepSimulation(&cmd);
+      status_samples.push_back(ctx.status_.position);
+      encoder_samples.push_back(ctx.position_.position);
+      physics_samples.push_back(
+          ctx.motor_sim_.position_rev() * output_sign);
+    }
+    const auto status_stats = CalcStats(status_samples);
+    const auto encoder_stats = CalcStats(encoder_samples);
+    const auto physics_stats = CalcStats(physics_samples);
 
     BOOST_CHECK_MESSAGE(
-        pos_stats.mean > (-limit - tolerance),
-        label << " position_min " << -limit << ": got " << pos_stats.mean
+        status_stats.mean > (-limit - tolerance),
+        label << " status position_min " << -limit
+            << ": got " << status_stats.mean
             << ", should not go past limit by more than " << tolerance);
+    BOOST_CHECK_MESSAGE(
+        encoder_stats.mean > (-limit - tolerance),
+        label << " encoder position_min " << -limit
+            << ": got " << encoder_stats.mean
+            << ", should not go past limit by more than " << tolerance);
+    BOOST_CHECK_MESSAGE(
+        physics_stats.mean > (-limit - tolerance),
+        label << " physics position_min " << -limit
+            << ": got " << physics_stats.mean
+            << ", should not go past limit by more than " << tolerance);
+    BOOST_CHECK_MESSAGE(
+        std::abs(encoder_stats.mean - physics_stats.mean)
+            < consistency_tolerance,
+        label << " encoder/physics mismatch at position_min " << -limit
+            << ": encoder " << encoder_stats.mean
+            << ", physics*sign " << physics_stats.mean
+            << ", delta " << std::abs(encoder_stats.mean - physics_stats.mean)
+            << " > " << consistency_tolerance);
   }
 }
 
@@ -219,6 +370,9 @@ BOOST_AUTO_TEST_CASE(SimVelocityTrackingMultiple) {
 
 // Test stop position - move at velocity until reaching target
 BOOST_AUTO_TEST_CASE(SimStopPosition) {
+  // stop_position requires NaN accel_limit, which conflicts with bemf_feedforward.
+  ctx.config_.bemf_feedforward_override = true;
+
   auto cmd = MakePositionCommand(0.0f, 0.0f, 0.2f);
   ctx.Command(&cmd);
   ctx.RunSimulation(&cmd, 0.5f);
@@ -229,6 +383,8 @@ BOOST_AUTO_TEST_CASE(SimStopPosition) {
     cmd.position = kNaN;  // No position target
     cmd.velocity = kFixedVelocity;
     cmd.stop_position = stop_pos;
+    cmd.accel_limit = -1.0f;  // Disable; stop_position is incompatible with accel_limit
+    cmd.velocity_limit = -1.0f;  // Reset (PrepareCommand may have set it finite)
     ctx.Command(&cmd);
 
     // After 0.5s, should be moving at commanded velocity
@@ -303,6 +459,9 @@ BOOST_AUTO_TEST_CASE(SimMaxTorqueLimiting) {
 
 // Test position limits enforcement
 BOOST_AUTO_TEST_CASE(SimPositionLimits) {
+  // stop_position requires NaN accel_limit, which conflicts with bemf_feedforward.
+  ctx.config_.bemf_feedforward_override = true;
+
   for (const float position_limit : {0.1f, 1.0f, 2.0f}) {
     // Test negative limit (position_min)
     {
@@ -314,12 +473,14 @@ BOOST_AUTO_TEST_CASE(SimPositionLimits) {
 
       auto cmd = MakePositionCommand(kNaN, 1.5f, 0.65f);  // Move in positive direction first
       cmd.stop_position = 0.0f;
+      cmd.accel_limit = -1.0f;  // Disable; stop_position is incompatible with accel_limit
       ctx.Command(&cmd);
       ctx.RunSimulation(&cmd, 3.0f);
 
       // Now command to move past the negative limit
       cmd.velocity = -1.5f;
       cmd.stop_position = -10.0f;
+      cmd.accel_limit = -1.0f;
       ctx.Command(&cmd);
       ctx.RunSimulation(&cmd, 3.0f);
 
@@ -340,6 +501,7 @@ BOOST_AUTO_TEST_CASE(SimPositionLimits) {
 
       auto cmd = MakePositionCommand(kNaN, 1.5f, 0.65f);
       cmd.stop_position = 10.0f;
+      cmd.accel_limit = -1.0f;  // Disable; stop_position is incompatible with accel_limit
       ctx.Command(&cmd);
       ctx.RunSimulation(&cmd, 3.0f);
 
@@ -616,6 +778,9 @@ BOOST_AUTO_TEST_CASE(SimVelocityAccelLimits) {
 // reset.  Uses RunBasicPositionTest helper (mirrors dyno's
 // ValidatePositionReverse).
 BOOST_AUTO_TEST_CASE(SimPositionReverse) {
+  // stop_position requires NaN accel_limit, which conflicts with bemf_feedforward.
+  ctx.config_.bemf_feedforward_override = true;
+
   // Dyno uses tolerance_scale = 1.0 for reverse test
   constexpr float kToleranceScale = 1.0f;
 
@@ -639,6 +804,9 @@ BOOST_AUTO_TEST_CASE(SimPositionReverse) {
 // Uses RunBasicPositionTest helper (mirrors dyno's
 // ValidateVoltageModeControl).
 BOOST_AUTO_TEST_CASE(SimVoltageModeControl) {
+  // stop_position requires NaN accel_limit, which conflicts with bemf_feedforward.
+  ctx.config_.bemf_feedforward_override = true;
+
   // Dyno uses tolerance_scale = 1.0 for voltage mode control
   constexpr float kToleranceScale = 1.0f;
 
@@ -898,9 +1066,11 @@ BOOST_AUTO_TEST_CASE(SimRezero) {
     // Update status position
     ctx.status_.position = ctx.position_.position;
 
-    // Verify position is now close to rezero value (within 0.5 rev as per dyno)
+    // Verify position is now close to rezero value (within 0.5 rev as per dyno).
+    // At exactly half a revolution, ISR_SetOutputPositionNearest has a tie-breaking
+    // ambiguity that can produce error of exactly 0.5, so use <= not <.
     BOOST_CHECK_MESSAGE(
-        std::abs(ctx.status_.position - rezero_value) < 0.5f,
+        std::abs(ctx.status_.position - rezero_value) <= 0.5f,
         "Rezero to " << rezero_value << ": position "
             << ctx.status_.position << " not within 0.5");
   }
@@ -921,6 +1091,9 @@ BOOST_AUTO_TEST_CASE(SimRezero) {
 //
 // The tolerance scale 2.3 is from the dyno test.
 BOOST_AUTO_TEST_CASE(SimFixedVoltageMode) {
+  // stop_position requires NaN accel_limit, which conflicts with bemf_feedforward.
+  ctx.config_.bemf_feedforward_override = true;
+
   constexpr float kToleranceScale = 2.3f;
 
   auto setup = [&] {
@@ -939,6 +1112,9 @@ BOOST_AUTO_TEST_CASE(SimFixedVoltageMode) {
 //
 // Runs the same test suite as the forward test.
 BOOST_AUTO_TEST_CASE(SimFixedVoltageModeReverse) {
+  // stop_position requires NaN accel_limit, which conflicts with bemf_feedforward.
+  ctx.config_.bemf_feedforward_override = true;
+
   // Dyno uses tolerance_scale = 2.3 for fixed voltage mode
   constexpr float kToleranceScale = 2.3f;
 
@@ -1530,6 +1706,9 @@ BOOST_AUTO_TEST_CASE(SimMaxSlip) {
 // 3. Wait to reach stop_position
 // 4. Drag DUT with fixture, check if it "sticks" (with slip) or returns (without)
 BOOST_AUTO_TEST_CASE(SimSlipStopPosition) {
+  // stop_position requires NaN accel_limit, which conflicts with bemf_feedforward.
+  ctx.config_.bemf_feedforward_override = true;
+
   for (const float slip : {kNaN, 0.04f}) {  // Match dyno: 0.04
     ctx.Reset();
     ctx.SetMotorPosition(0.0f);
@@ -1551,6 +1730,7 @@ BOOST_AUTO_TEST_CASE(SimSlipStopPosition) {
     // Phase 1: Fixture holds DUT at position 0 while DUT tries to move
     auto cmd = MakePositionCommand(kNaN, kVelocity, 0.3f);
     cmd.stop_position = 0.5f;  // "s0.5" in dyno
+    cmd.accel_limit = -1.0f;  // Disable; stop_position is incompatible with accel_limit
 
     ctx.Command(&cmd);
     fixture.HoldPosition(0.0f);  // Fixture holds at 0
@@ -1669,7 +1849,10 @@ BOOST_AUTO_TEST_CASE(SimSlipBounds) {
   // Increase motor viscous damping to simulate the higher effective damping
   // of the real dynamometer setup (two coupled motors with mechanical losses).
   // This prevents the motor from overshooting the position bound on release.
-  ctx.motor_sim_.params().B = 0.01f;  // ~300x higher than default 3e-5
+  // Increase motor viscous damping via the motor model.
+  auto* simple_model = dynamic_cast<SimpleMotorModel*>(ctx.motor_sim_.model().get());
+  BOOST_REQUIRE(simple_model != nullptr);
+  simple_model->simple_params().B = 0.01f;  // ~300x higher than default 3e-5
 
   // Configure fixture
   fixture.ConfigureRigidHold(0.65f);
@@ -1707,6 +1890,7 @@ BOOST_AUTO_TEST_CASE(SimSlipBounds) {
 
       // Release fixture and let motor return
       fixture.Stop();
+
       ctx.RunWithFixture(&cmd, &fixture, 3.0f);
 
       // Check final position
@@ -1830,6 +2014,10 @@ BOOST_AUTO_TEST_CASE(SimDqIlimit) {
   // This test verifies the integrator doesn't wind up excessively
   // by checking that stopping after high-speed operation doesn't
   // result in prolonged torque output.
+
+  // Use a high acceleration limit so the deceleration check is not
+  // bottlenecked by the trajectory planner.
+  ctx.config_.default_accel_limit = 10000.0f;
 
   // Command high velocity
   auto cmd = MakePositionCommand(kNaN, 400.0f, 0.5f);
