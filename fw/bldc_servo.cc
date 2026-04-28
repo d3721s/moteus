@@ -897,8 +897,8 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
       status_.adc_cur2_raw = ADC1->DR;
       status_.adc_cur3_raw = ADC2->DR;
     } else if (family1_) {
-      status_.adc_cur1_raw = ADC1->DR;
-      status_.adc_cur2_raw = ADC2->DR;
+      status_.adc_cur1_raw = ADC2->DR;
+      status_.adc_cur2_raw = ADC1->DR;
       status_.adc_cur3_raw = ADC3->DR;
     } else if (family2_ || family3_) {
       status_.adc_cur1_raw = ADC3->DR;
