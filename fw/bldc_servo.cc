@@ -840,6 +840,8 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
     // section 2.7.11 (simultaneous triggering).
 
     // Wait for ADC sampling to complete.
+    while ((ADC1->ISR & ADC_ISR_EOSMP) == 0);
+    while ((ADC2->ISR & ADC_ISR_EOSMP) == 0);
     while ((ADC3->ISR & ADC_ISR_EOSMP) == 0);
 
 #ifdef MOTEUS_DEBUG_OUT
@@ -882,6 +884,8 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
 
     // And now, wait for the entire conversion to complete.  We
     // started ADC3 last, so we just wait for it.
+    WaitForAdc(ADC1);
+    WaitForAdc(ADC2);
     WaitForAdc(ADC3);
 
 #ifdef MOTEUS_PERFORMANCE_MEASURE
@@ -910,6 +914,9 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
     WaitForAdc(ADC5);
 
     // Clear the end of sample flag for the ADCs we check.
+
+    ADC1->ISR |= (ADC_ISR_EOSMP | ADC_ISR_EOS);
+    ADC2->ISR |= (ADC_ISR_EOSMP | ADC_ISR_EOS);
     ADC3->ISR |= (ADC_ISR_EOSMP | ADC_ISR_EOS);
     ADC4->ISR |= (ADC_ISR_EOSMP | ADC_ISR_EOS);
     ADC5->ISR |= (ADC_ISR_EOSMP | ADC_ISR_EOS);
