@@ -556,7 +556,7 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
     // and ensure each ADC is started in an exact phase relationship to
     // the global cycle counter.
     ADC12_COMMON->CCR =
-        (2 << ADC_CCR_CKMODE_Pos)；
+        (2 << ADC_CCR_CKMODE_Pos);
     ADC345_COMMON->CCR =
         (2 << ADC_CCR_CKMODE_Pos) |  // synchronous AHB/2
         (1 << ADC_CCR_DUAL_Pos); // dual mode, regular + injected
