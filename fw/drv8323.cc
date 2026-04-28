@@ -357,7 +357,7 @@ class Drv8323::Impl {
         (map_choice(tdrive_ns_table, config_.tdrive_ns) << 8) |
         (map_choice(drv8323 ? idrivep_table_drv8323 : idrivep_table_drv8353,
                     config_.idrivep_ls_ma) << 4) |
-        (map_choice(drv8323 ? idriven_table_drv8323 : idrivep_table_drv8353,
+        (map_choice(drv8323 ? idriven_table_drv8323 : idriven_table_drv8353,
                     config_.idriven_ls_ma) << 0);
 
     const uint16_t reg5 =
