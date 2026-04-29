@@ -95,6 +95,8 @@ public:
       ms_since_last_send_++;
     }
 
+    PollStatuswordReport();
+
     if (!auto_value_1_enabled_) {
       PollHeartbeatProducer();
     } else {
@@ -111,7 +113,7 @@ private:
   static constexpr uint8_t DirOffset = 10;
   static constexpr uint8_t NodeOffset = 5;
   static constexpr uint8_t CmdOffset = 0;
-  static constexpr uint32_t DefaultHeartbeatProducerMs = 1000;
+  static constexpr uint32_t DefaultHeartbeatProducerMs = 4000;
 
   static float CleanFloat(float value) {
     return std::isnan(value) ? 0.0f : value;
@@ -350,6 +352,42 @@ private:
                   (multiplex_protocol_->config()->id << NodeOffset) |
                   CAN_CMD_HEARTBEAT,
               0, nullptr);
+  }
+
+  void PollStatuswordReport() {
+    if (bldc_servo_ == nullptr) {
+      return;
+    }
+
+    const uint32_t status_code = MakeStatusCode();
+    const uint32_t errors_code = MakeErrorsCode();
+    if (!statusword_report_initialized_) {
+      status_ = status_code;
+      errors_ = errors_code;
+      statusword_report_initialized_ = true;
+      return;
+    }
+    if (status_ == status_code && errors_ == errors_code) {
+      return;
+    }
+
+    status_ = status_code;
+    errors_ = errors_code;
+
+    char reply[8] = {0};
+    reply[0] = status_code & 0xFF;
+    reply[1] = (status_code >> 8) & 0xFF;
+    reply[2] = (status_code >> 16) & 0xFF;
+    reply[3] = (status_code >> 24) & 0xFF;
+    reply[4] = errors_code & 0xFF;
+    reply[5] = (errors_code >> 8) & 0xFF;
+    reply[6] = (errors_code >> 16) & 0xFF;
+    reply[7] = (errors_code >> 24) & 0xFF;
+
+    SendFrame(Send << DirOffset |
+                  (multiplex_protocol_->config()->id << NodeOffset) |
+                  CAN_CMD_STATUSWORD_REPORT,
+              8, reply);
   }
 
   void ApplyConfigSideEffects(uint32_t index) {
@@ -935,18 +973,15 @@ private:
       return false;
     }
 
-    const uint32_t status_code = MakeStatusCode();
-    const uint32_t errors_code = MakeErrorsCode();
-
     char reply[8] = {0};
-    reply[0] = status_code & 0xFF;
-    reply[1] = (status_code >> 8) & 0xFF;
-    reply[2] = (status_code >> 16) & 0xFF;
-    reply[3] = (status_code >> 24) & 0xFF;
-    reply[4] = errors_code & 0xFF;
-    reply[5] = (errors_code >> 8) & 0xFF;
-    reply[6] = (errors_code >> 16) & 0xFF;
-    reply[7] = (errors_code >> 24) & 0xFF;
+    reply[0] = status_ & 0xFF;
+    reply[1] = (status_ >> 8) & 0xFF;
+    reply[2] = (status_ >> 16) & 0xFF;
+    reply[3] = (status_ >> 24) & 0xFF;
+    reply[4] = errors_ & 0xFF;
+    reply[5] = (errors_ >> 8) & 0xFF;
+    reply[6] = (errors_ >> 16) & 0xFF;
+    reply[7] = (errors_ >> 24) & 0xFF;
 
     SendFrame(Send << DirOffset |
                   (multiplex_protocol_->config()->id << NodeOffset) |
@@ -991,8 +1026,8 @@ private:
     // hall value: raw sensor value
     const uint16_t hall_value =
         static_cast<uint16_t>(mp.sources[0].raw & 0xFFFF);
-    const uint16_t status_code = static_cast<uint16_t>(MakeStatusCode());
-    const uint16_t errors_code = static_cast<uint16_t>(MakeErrorsCode());
+    const uint16_t status_code = static_cast<uint16_t>(status_);
+    const uint16_t errors_code = static_cast<uint16_t>(errors_);
     // board NTC: °C × 100 → int16
     const int16_t ntc_i16 = static_cast<int16_t>(s.fet_temp_C * 100.0f);
     // Iq current: A × 100 → int16
@@ -1127,9 +1162,10 @@ private:
   BldcServo::CommandData pending_;
   ConfigParams config_;
 
-  uint32_t status_;
-  uint32_t errors_;
+  uint32_t status_ = 0;
+  uint32_t errors_ = 0;
 
+  bool statusword_report_initialized_ = false;
   bool auto_value_1_enabled_ = false;
   uint32_t ms_since_last_send_ = 0;
 
