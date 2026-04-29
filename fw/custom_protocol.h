@@ -882,12 +882,16 @@ private:
   }
 
   bool HandleSetTorque(int dlc, const char *data) {
-    std::memcpy(&pending_.max_torque_Nm , data, sizeof(float));
+    std::memcpy(&pending_.max_torque_Nm, data, sizeof(float));
     if (config_.sync_target_enable == 0) {
       if (bldc_servo_ == nullptr)
         return false;
       if (bldc_servo_->status().mode != BldcServo::Mode::kPosition)
         return false;
+      pending_.mode = bldc_servo_->status().mode;
+      pending_.position = std::numeric_limits<float>::quiet_NaN();
+      pending_.velocity = std::numeric_limits<float>::quiet_NaN();
+      pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
       bldc_servo_->Command(pending_);
     }
     return true;
@@ -916,6 +920,10 @@ private:
         return false;
       if (bldc_servo_->status().mode != BldcServo::Mode::kPosition)
         return false;
+      pending_.mode = bldc_servo_->status().mode;
+      pending_.velocity = std::numeric_limits<float>::quiet_NaN();
+      pending_.max_torque_Nm = std::numeric_limits<float>::quiet_NaN();
+      pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
       bldc_servo_->Command(pending_);
     }
     return true;
@@ -923,12 +931,40 @@ private:
 
   bool HandleSync(int dlc, const char *data) {
     if (config_.sync_target_enable == 0) {
-      return true;
+      return false;
     }
     if (bldc_servo_ == nullptr)
       return false;
     if (bldc_servo_->status().mode != BldcServo::Mode::kPosition)
       return false;
+    pending_.mode = bldc_servo_->status().mode;
+    switch (config_.control_mode) {
+    case ControlTorque: {
+      pending_.position = std::numeric_limits<float>::quiet_NaN();
+      pending_.velocity = std::numeric_limits<float>::quiet_NaN();
+      pending_.feedforward_Nm = std::numeric_limits<float>::quiet_NaN();
+      break;
+    }
+    case ControlVelocity: {
+      pending_.position = std::numeric_limits<float>::quiet_NaN();
+      pending_.max_torque_Nm = std::numeric_limits<float>::quiet_NaN();
+      pending_.feedforward_Nm = std::numeric_limits<float>::quiet_NaN();
+      break;
+    }
+    case ControlProfiledPosition: {
+      pending_.velocity = std::numeric_limits<float>::quiet_NaN();
+      pending_.max_torque_Nm = std::numeric_limits<float>::quiet_NaN();
+      pending_.feedforward_Nm = std::numeric_limits<float>::quiet_NaN();
+      break;
+    }
+    case ControlFilteredPosition: {
+      break;
+    }
+    default: {
+      return false;
+    }
+    }
+    pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
     bldc_servo_->Command(pending_);
     return true;
   }
