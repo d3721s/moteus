@@ -981,10 +981,10 @@ private:
     const auto &s = bldc_servo_->status();
     const auto &mp = bldc_servo_->motor_position();
 
-    // velocity: rev/s → int16
-    const int16_t vel_i16 = static_cast<int16_t>(s.velocity);
-    // position: rev → int16
-    const int16_t pos_i16 = static_cast<int16_t>(s.position);
+    // velocity: rev/s * 16384 → int16
+    const int16_t vel_i16 = static_cast<int16_t>(s.velocity * 16384);
+    // position: rev * 16384 → int16
+    const int16_t pos_i16 = static_cast<int16_t>(s.position * 16384);
     // hall offset: low 16 bits of offset_value
     const uint16_t hall_offset =
         static_cast<uint16_t>(mp.sources[0].offset_value & 0xFFFF);
