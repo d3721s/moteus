@@ -980,11 +980,11 @@ private:
 
     const auto &s = bldc_servo_->status();
     const auto &mp = bldc_servo_->motor_position();
-#pragma message("单位需确定")
-    // velocity: rev/s × 100 → int16
-    const int16_t vel_i16 = static_cast<int16_t>(s.velocity * 100.0f);
-    // position: rev × 100 → int16
-    const int16_t pos_i16 = static_cast<int16_t>(s.position * 100.0f);
+
+    // velocity: rev/s → int16
+    const int16_t vel_i16 = static_cast<int16_t>(s.velocity);
+    // position: rev → int16
+    const int16_t pos_i16 = static_cast<int16_t>(s.position);
     // hall offset: low 16 bits of offset_value
     const uint16_t hall_offset =
         static_cast<uint16_t>(mp.sources[0].offset_value & 0xFFFF);
@@ -993,8 +993,8 @@ private:
         static_cast<uint16_t>(mp.sources[0].raw & 0xFFFF);
     const uint16_t status_code = static_cast<uint16_t>(MakeStatusCode());
     const uint16_t errors_code = static_cast<uint16_t>(MakeErrorsCode());
-    // board NTC: °C × 10 → int16
-    const int16_t ntc_i16 = static_cast<int16_t>(s.fet_temp_C * 10.0f);
+    // board NTC: °C × 100 → int16
+    const int16_t ntc_i16 = static_cast<int16_t>(s.fet_temp_C * 100.0f);
     // Iq current: A × 100 → int16
     const int16_t iq_i16 = static_cast<int16_t>(s.q_A * 100.0f);
 
