@@ -11,6 +11,7 @@ struct Fuda {
   Fuda();
 
   struct Status {
+    bool enabled = false;
     float velocity = 0.0f;
     float position = 0.0f;
     int32_t hall_offset = 0;
@@ -29,9 +30,24 @@ struct Fuda {
     bool over_voltage = false;
     bool under_voltage = false;
     bool over_current = false;
+    bool other_fault = false;
+
+    bool calib_running = false;
+    int32_t calib_step = 0;
+    int32_t calib_data = 0;
+    bool anticogging_running = false;
+    int32_t anticogging_step = 0;
+    int32_t anticogging_value = 0;
+    bool heartbeat_alive = false;
+    int32_t last_return_code = 0;
+    int32_t fw_version_major = 0;
+    int32_t fw_version_minor = 0;
+    bool auto_value_1_enabled = false;
+    bool dfu_running = false;
 
     template <typename Archive>
     void Serialize(Archive* a) {
+      a->Visit(MJ_NVP(enabled));
       a->Visit(MJ_NVP(velocity));
       a->Visit(MJ_NVP(position));
       a->Visit(MJ_NVP(hall_offset));
@@ -48,11 +64,34 @@ struct Fuda {
       a->Visit(MJ_NVP(over_voltage));
       a->Visit(MJ_NVP(under_voltage));
       a->Visit(MJ_NVP(over_current));
+      a->Visit(MJ_NVP(other_fault));
+      a->Visit(MJ_NVP(calib_running));
+      a->Visit(MJ_NVP(calib_step));
+      a->Visit(MJ_NVP(calib_data));
+      a->Visit(MJ_NVP(anticogging_running));
+      a->Visit(MJ_NVP(anticogging_step));
+      a->Visit(MJ_NVP(anticogging_value));
+      a->Visit(MJ_NVP(heartbeat_alive));
+      a->Visit(MJ_NVP(last_return_code));
+      a->Visit(MJ_NVP(fw_version_major));
+      a->Visit(MJ_NVP(fw_version_minor));
+      a->Visit(MJ_NVP(auto_value_1_enabled));
+      a->Visit(MJ_NVP(dfu_running));
     }
   };
 
   struct Config {
     bool enable = false;
+    float input_pos = 0.0f;
+    float input_vel = 0.0f;
+    float input_torque = 0.0f;
+    bool calib_enable = false;
+    bool auto_value_1_enable = false;
+    bool error_reset_request = false;
+    bool set_home_request = false;
+    bool save_all_config_request = false;
+    bool reset_all_config_request = false;
+    bool dfu_enable = false;
     int32_t invert_motor_dir = 0;
     float inertia = 0.0f;
     float torque_constant = 0.0f;
@@ -94,6 +133,16 @@ struct Fuda {
     template <typename Archive>
     void Serialize(Archive* a) {
       a->Visit(MJ_NVP(enable));
+      a->Visit(MJ_NVP(input_pos));
+      a->Visit(MJ_NVP(input_vel));
+      a->Visit(MJ_NVP(input_torque));
+      a->Visit(MJ_NVP(calib_enable));
+      a->Visit(MJ_NVP(auto_value_1_enable));
+      a->Visit(MJ_NVP(error_reset_request));
+      a->Visit(MJ_NVP(set_home_request));
+      a->Visit(MJ_NVP(save_all_config_request));
+      a->Visit(MJ_NVP(reset_all_config_request));
+      a->Visit(MJ_NVP(dfu_enable));
       a->Visit(MJ_NVP(invert_motor_dir));
       a->Visit(MJ_NVP(inertia));
       a->Visit(MJ_NVP(torque_constant));
