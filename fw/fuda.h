@@ -6,6 +6,7 @@
 namespace moteus {
 
 struct Fuda {
+  Fuda();
   explicit Fuda(mjlib::micro::PersistentConfig* persistent_config);
 
   struct Config {
