@@ -46,7 +46,6 @@ struct Context : public BldcServoControl<Context> {
   Vec3 last_pwm;
 
   int hard_stop_count = 0;
-  int fault_count = 0;
   int calibrating_count = 0;
   int brake_count = 0;
   int start_calibrating_count = 0;
@@ -64,10 +63,6 @@ struct Context : public BldcServoControl<Context> {
 
   void DoHardStop() {
     hard_stop_count++;
-  }
-
-  void DoFault() {
-    fault_count++;
   }
 
   void DoCalibrating() {
@@ -684,6 +679,36 @@ BOOST_AUTO_TEST_CASE(BldcServoControlDoCurrentFieldWeakening) {
   BOOST_TEST(ctx.status_.fw.id_A < 0.0f);
 }
 
+// Regression: with motor.Kv == 0 (motor not yet calibrated, e.g.
+// during the encoder-mapping phase of moteus_tool's calibration),
+// ISR_CalculateDerivedQuantities must not produce a zero
+// motor_max_velocity.  BldcServoPosition::UpdateCommand clamps
+// control_velocity to [-motor_max_velocity, motor_max_velocity], so a
+// zero limit pins the velocity to 0 in kPosition mode.  That mode is
+// what the firmware's "d cali" command (used by current-mode encoder
+// calibration) drives, so a zero limit prevents the motor from
+// spinning during calibration.
+BOOST_AUTO_TEST_CASE(BldcServoControlMotorMaxVelocityWhenUncalibrated) {
+  Context ctx;
+  ctx.status_.bus_V = 24.0f;
+  ctx.status_.filt_bus_V = 24.0f;
+  ctx.position_.epoch = 0;
+  ctx.isr_motor_position_epoch_ = 0;
+  ctx.motor_.poles = 2;
+  // motor_.Kv intentionally left at 0 (uncalibrated).
+  ctx.motor_position_config_val.output.sign = 1;
+  ctx.motor_position_config_val.rotor_to_output_ratio = 1.0f;
+
+  ctx.UpdateDerivedMotorConstants();
+  ctx.UpdateFieldWeakeningIdChar();
+
+  ctx.ISR_CalculateDerivedQuantities(0.0f, 0.0f, 0.0f, false);
+
+  // Must permit a normal calibration speed without clamping.  The
+  // default cal_ll_encoder_speed in moteus_tool is 1 rev/s.
+  BOOST_TEST(ctx.status_.motor_max_velocity > 1.0f);
+}
+
 BOOST_AUTO_TEST_CASE(BldcServoControlDoPosition) {
   Context ctx;
   ctx.status_.filt_bus_V = 24.0f;
@@ -877,12 +902,21 @@ BOOST_AUTO_TEST_CASE(BldcServoControlDoStopped) {
   BOOST_TEST(ctx.hard_stop_count == 1);
   BOOST_TEST(ctx.status_.power_W == 0.0f);
 
-  // With cooldown, should call ISR_DoCurrent instead.
+  // With cooldown > brake threshold, should call ISR_DoCurrent instead.
+  ctx.status_.cooldown_count = ctx.config_.cooldown_brake + 1;
+  ctx.ISR_DoStopped(sc);
+  BOOST_TEST(ctx.brake_count == 0);
+  BOOST_TEST(ctx.hard_stop_count == 1);  // unchanged
+  BOOST_TEST(ctx.status_.cooldown_count == (ctx.config_.cooldown_brake));
+  BOOST_TEST(ctx.pwm_control_count == 1);  // ISR_DoCurrent drove PWM
+
+  // And with a small cooldown, we should call brake.
   ctx.status_.cooldown_count = 3;
   ctx.ISR_DoStopped(sc);
+  BOOST_TEST(ctx.brake_count == 1);
   BOOST_TEST(ctx.hard_stop_count == 1);  // unchanged
+  BOOST_TEST(ctx.pwm_control_count == 1);  // unchanged
   BOOST_TEST(ctx.status_.cooldown_count == 2);
-  BOOST_TEST(ctx.pwm_control_count == 1);  // ISR_DoCurrent drove PWM
 }
 
 BOOST_AUTO_TEST_CASE(BldcServoControlDoMeasureInductance) {

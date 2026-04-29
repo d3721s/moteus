@@ -131,7 +131,6 @@ class SimulationContext : public BldcServoControl<SimulationContext> {
   Vec3 last_pwm{0.5f, 0.5f, 0.5f};  // Neutral PWM (no current)
 
   int hard_stop_count = 0;
-  int fault_count = 0;
   int calibrating_count = 0;
   int brake_count = 0;
   int start_calibrating_count = 0;
@@ -260,10 +259,6 @@ class SimulationContext : public BldcServoControl<SimulationContext> {
 
   void DoHardStop() {
     hard_stop_count++;
-  }
-
-  void DoFault() {
-    fault_count++;
   }
 
   void DoCalibrating() {

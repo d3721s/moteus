@@ -656,6 +656,7 @@ struct BldcServoConfig {
   float max_velocity_derate = 2.0;
 
   uint16_t cooldown_cycles = 256;
+  uint16_t cooldown_brake = 64;
 
   // When starting position control from the "stopped" state, the
   // control velocity will be initialized from 'velocity_filt'.  If
@@ -724,6 +725,7 @@ struct BldcServoConfig {
     a->Visit(MJ_NVP(max_velocity));
     a->Visit(MJ_NVP(max_velocity_derate));
     a->Visit(MJ_NVP(cooldown_cycles));
+    a->Visit(MJ_NVP(cooldown_brake));
     a->Visit(MJ_NVP(velocity_zero_capture_threshold));
     a->Visit(MJ_NVP(timing_fault));
     a->Visit(MJ_NVP(emit_debug));

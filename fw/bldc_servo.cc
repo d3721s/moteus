@@ -1255,16 +1255,6 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
     *pwm3_ccr_ = 0;
   }
 
-  void DoFault() MOTEUS_CCM_ATTRIBUTE {
-    motor_driver_->PowerOff();
-    *pwm1_ccr_ = 0;
-    *pwm2_ccr_ = 0;
-    *pwm3_ccr_ = 0;
-
-    status_.power_W = 0.0f;
-    status_.fw.id_A = 0.0f;
-  }
-
   void DoCalibrating() MOTEUS_CCM_ATTRIBUTE {
     ISR_DoCalibrating();
   }
