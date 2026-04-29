@@ -272,7 +272,8 @@ int main(void) {
   GitInfo git_info;
   telemetry_manager.Register("git", &git_info);
 
-  Fuda fuda(&persistent_config);
+  Fuda fuda;
+  persistent_config.Register("fuda", fuda.config(), []() {});
   telemetry_manager.Register("fuda", &fuda);
 
   // We always want to update our filters at least once.
