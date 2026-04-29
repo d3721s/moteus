@@ -266,6 +266,12 @@ private:
     bool (CustomProtocol::*handler)(int dlc, const char *data);
   };
 
+  struct InputCommand {
+    float input_pos = std::numeric_limits<float>::quiet_NaN();
+    float input_vel = std::numeric_limits<float>::quiet_NaN();
+    float input_torque = 0.0f;
+  };
+
   enum ProtocolControlMode : int32_t {
     ControlTorque = 0,
     ControlVelocity = 1,
@@ -883,51 +889,42 @@ private:
   }
 
   bool HandleSetTorque(int dlc, const char *data) {
-    if (bldc_servo_ == nullptr)
-      return false;
-    float torque_Nm = 0.0f;
-    std::memcpy(&torque_Nm, data, sizeof(float));
-    pending_.i_q_A = bldc_servo_->torque_model().torque_to_current(torque_Nm);
+    std::memcpy(&input_.input_torque, data, sizeof(float));
     if (config_.sync_target_enable == 0) {
+      if (bldc_servo_ == nullptr)
+        return false;
       if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
         return false;
-      pending_.mode = BldcServo::Mode::kCurrent;
-      pending_.i_d_A = 0.0f;
-      pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
+      if (!ApplyInputToPending())
+        return false;
       bldc_servo_->Command(pending_);
     }
     return true;
   }
 
   bool HandleSetVelocity(int dlc, const char *data) {
-    std::memcpy(&pending_.velocity, data, sizeof(float));
+    std::memcpy(&input_.input_vel, data, sizeof(float));
     if (config_.sync_target_enable == 0) {
       if (bldc_servo_ == nullptr)
         return false;
       if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
         return false;
-      pending_.mode = BldcServo::Mode::kPosition;
-      pending_.position = std::numeric_limits<float>::quiet_NaN();
-      pending_.max_torque_Nm = std::numeric_limits<float>::quiet_NaN();
-      pending_.feedforward_Nm = std::numeric_limits<float>::quiet_NaN();
-      pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
+      if (!ApplyInputToPending())
+        return false;
       bldc_servo_->Command(pending_);
     }
     return true;
   }
 
   bool HandleSetPosition(int dlc, const char *data) {
-    std::memcpy(&pending_.position, data, sizeof(float));
+    std::memcpy(&input_.input_pos, data, sizeof(float));
     if (config_.sync_target_enable == 0) {
       if (bldc_servo_ == nullptr)
         return false;
       if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
         return false;
-      pending_.mode = BldcServo::Mode::kPosition;
-      pending_.velocity = std::numeric_limits<float>::quiet_NaN();
-      pending_.max_torque_Nm = std::numeric_limits<float>::quiet_NaN();
-      pending_.feedforward_Nm = std::numeric_limits<float>::quiet_NaN();
-      pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
+      if (!ApplyInputToPending())
+        return false;
       bldc_servo_->Command(pending_);
     }
     return true;
@@ -941,22 +938,40 @@ private:
       return false;
     if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
       return false;
+    if (!ApplyInputToPending())
+      return false;
+    bldc_servo_->Command(pending_);
+    return true;
+  }
+
+  bool ApplyInputToPending() {
+    if (bldc_servo_ == nullptr)
+      return false;
     switch (config_.control_mode) {
     case ControlTorque: {
       pending_.mode = BldcServo::Mode::kCurrent;
       pending_.i_d_A = 0.0f;
+      pending_.i_q_A =
+          bldc_servo_->torque_model().torque_to_current(input_.input_torque);
+      pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
       break;
     }
     case ControlVelocity: {
       pending_.mode = BldcServo::Mode::kPosition;
       pending_.position = std::numeric_limits<float>::quiet_NaN();
-      pending_.feedforward_Nm = std::numeric_limits<float>::quiet_NaN();
+      pending_.velocity = input_.input_vel;
+      pending_.feedforward_Nm = input_.input_torque;
+      pending_.max_torque_Nm = std::numeric_limits<float>::quiet_NaN();
+      pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
       break;
     }
     case ControlProfiledPosition: {
       pending_.mode = BldcServo::Mode::kPosition;
+      pending_.position = input_.input_pos;
       pending_.velocity = std::numeric_limits<float>::quiet_NaN();
-      pending_.feedforward_Nm = std::numeric_limits<float>::quiet_NaN();
+      pending_.feedforward_Nm = input_.input_torque;
+      pending_.max_torque_Nm = std::numeric_limits<float>::quiet_NaN();
+      pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
       break;
     }
     case ControlFilteredPosition: {
@@ -967,9 +982,6 @@ private:
       return false;
     }
     }
-    pending_.max_torque_Nm = std::numeric_limits<float>::quiet_NaN();
-    pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
-    bldc_servo_->Command(pending_);
     return true;
   }
 
@@ -1230,6 +1242,7 @@ private:
   mjlib::micro::PersistentConfig *const persistent_config_;
 
   BldcServo::CommandData pending_;
+  InputCommand input_;
   ConfigParams config_;
 
   uint32_t status_ = 0;
