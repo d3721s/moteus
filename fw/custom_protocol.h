@@ -902,6 +902,7 @@ private:
         return false;
       pending_.position = std::numeric_limits<float>::quiet_NaN();
       pending_.feedforward_Nm = std::numeric_limits<float>::quiet_NaN();
+      pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
       bldc_servo_->Command(pending_);
     }
     return true;
