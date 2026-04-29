@@ -884,20 +884,44 @@ private:
 
   bool HandleSetTorque(int dlc, const char *data) {
     std::memcpy(&pending_.feedforward_Nm, data, sizeof(float));
+    if (config_.sync_target_enable == 0) {
+      if (bldc_servo_ == nullptr)
+        return false;
+      if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
+        return false;
+      bldc_servo_->Command(pending_);
+    }
     return true;
   }
 
   bool HandleSetVelocity(int dlc, const char *data) {
     std::memcpy(&pending_.velocity, data, sizeof(float));
+    if (config_.sync_target_enable == 0) {
+      if (bldc_servo_ == nullptr)
+        return false;
+      if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
+        return false;
+      bldc_servo_->Command(pending_);
+    }
     return true;
   }
 
   bool HandleSetPosition(int dlc, const char *data) {
     std::memcpy(&pending_.position, data, sizeof(float));
+    if (config_.sync_target_enable == 0) {
+      if (bldc_servo_ == nullptr)
+        return false;
+      if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
+        return false;
+      bldc_servo_->Command(pending_);
+    }
     return true;
   }
 
   bool HandleSync(int dlc, const char *data) {
+    if (config_.sync_target_enable == 0) {
+      return true;
+    }
     if (bldc_servo_ == nullptr)
       return false;
     if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
