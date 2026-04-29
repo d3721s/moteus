@@ -75,7 +75,10 @@ cc_library(
 
 cc_library(
     name="fuda",
-    hdrs=["fuda.h"],
+    hdrs=[
+        "fuda.h",
+        "fuda/requests.h",
+    ],
     srcs=["fuda.cc"],
     deps=[
         "@com_github_mjbots_mjlib//mjlib/base:visitor",
@@ -376,3 +379,5 @@ test_suite(
         "encoder_bw_regression_test",
     ],
 )
+
+
