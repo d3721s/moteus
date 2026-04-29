@@ -79,7 +79,6 @@ cc_library(
     srcs=["fuda.cc"],
     deps=[
         "@com_github_mjbots_mjlib//mjlib/base:visitor",
-        "@com_github_mjbots_mjlib//mjlib/micro:persistent_config",
     ],
     copts=COPTS,
 )
