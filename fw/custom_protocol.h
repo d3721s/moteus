@@ -882,7 +882,7 @@ private:
   }
 
   bool HandleSetTorque(int dlc, const char *data) {
-    std::memcpy(&pending_.feedforward_Nm, data, sizeof(float));
+    std::memcpy(&pending_.max_torque_Nm , data, sizeof(float));
     if (config_.sync_target_enable == 0) {
       if (bldc_servo_ == nullptr)
         return false;
@@ -902,9 +902,8 @@ private:
         return false;
       pending_.mode = bldc_servo_->status().mode;
       pending_.position = std::numeric_limits<float>::quiet_NaN();
-      pending_.feedforward_Nm = std::numeric_limits<float>::quiet_NaN();
+      pending_.max_torque_Nm  = std::numeric_limits<float>::quiet_NaN();
       pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
-      bldc_servo_->RecapturePositionVelocity();
       bldc_servo_->Command(pending_);
     }
     return true;
