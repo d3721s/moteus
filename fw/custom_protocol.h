@@ -900,6 +900,7 @@ private:
         return false;
       if (bldc_servo_->status().mode != BldcServo::Mode::kPosition)
         return false;
+      pending_.mode = bldc_servo_->status().mode;
       pending_.position = std::numeric_limits<float>::quiet_NaN();
       pending_.feedforward_Nm = std::numeric_limits<float>::quiet_NaN();
       pending_.timeout_s = std::numeric_limits<float>::quiet_NaN();
