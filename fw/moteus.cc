@@ -29,6 +29,7 @@
 #include "fw/board_debug.h"
 #include "fw/clock_manager.h"
 #include "fw/firmware_info.h"
+#include "fw/fuda.h"
 #include "fw/git_info.h"
 #include "fw/millisecond_timer.h"
 #include "fw/moteus_controller.h"
@@ -270,6 +271,9 @@ int main(void) {
 
   GitInfo git_info;
   telemetry_manager.Register("git", &git_info);
+
+  Fuda fuda(&persistent_config);
+  telemetry_manager.Register("fuda", &fuda);
 
   // We always want to update our filters at least once.
   uint8_t old_multiplex_id = 255;

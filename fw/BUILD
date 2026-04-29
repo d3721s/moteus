@@ -73,6 +73,17 @@ cc_library(
     copts=COPTS,
 )
 
+cc_library(
+    name="fuda",
+    hdrs=["fuda.h"],
+    srcs=["fuda.cc"],
+    deps=[
+        "@com_github_mjbots_mjlib//mjlib/base:visitor",
+        "@com_github_mjbots_mjlib//mjlib/micro:persistent_config",
+    ],
+    copts=COPTS,
+)
+
 g4_bootloader_mbed_binary(
     name="can_bootloader",
     srcs=[
@@ -150,6 +161,7 @@ MOTEUS_SOURCES = [
 
 MOTEUS_DEPS = [
     ":common",
+    ":fuda",
     ":git_info",
     "@com_github_mjbots_mjlib//mjlib/base:assert",
     "@com_github_mjbots_mjlib//mjlib/base:inplace_function",
