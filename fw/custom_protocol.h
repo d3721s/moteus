@@ -285,6 +285,7 @@ private:
     ErrorOverVoltage = 1u << 16,
     ErrorUnderVoltage = 1u << 17,
     ErrorOverCurrent = 1u << 18,
+    ErrorOther = 1u << 19,
   };
 
   uint32_t MakeStatusCode() const {
@@ -320,8 +321,10 @@ private:
       return ErrorOverCurrent;
     case errc::kEncoderFault:
       return ErrorEncoderOffline;
-    default:
+    case errc::kSuccess:
       return 0;
+    default:
+      return ErrorOther;
     }
   }
 
