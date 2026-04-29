@@ -672,10 +672,10 @@ struct BldcServoConfig {
   uint32_t emit_debug = 0;
 
   BldcServoConfig() {
-    pid_position.kp = 4.0f;
-    pid_position.ki = 1.0f;
+    pid_position.kp = 1.0f;
+    pid_position.ki = 0.0f;
     pid_position.ilimit = 0.0f;
-    pid_position.kd = 0.05f;
+    pid_position.kd = 0.01f;
     pid_position.sign = -1.0f;
   }
 
