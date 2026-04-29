@@ -860,7 +860,6 @@ private:
 
     if (bldc_servo_->status().mode != BldcServo::Mode::kPosition) {
       int32_t fault_value = static_cast<int32_t>(bldc_servo_->status().fault);
-      // 防止出现错误码为 kSuccess 但模式为 kFault 时错误地返回成功状态
       char reply[4] = {0xFF};
       reply[0] = fault_value & 0xFF;
       reply[1] = (fault_value >> 8) & 0xFF;
@@ -887,7 +886,7 @@ private:
     if (config_.sync_target_enable == 0) {
       if (bldc_servo_ == nullptr)
         return false;
-      if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
+      if (bldc_servo_->status().mode != BldcServo::Mode::kPosition)
         return false;
       bldc_servo_->Command(pending_);
     }
@@ -899,7 +898,7 @@ private:
     if (config_.sync_target_enable == 0) {
       if (bldc_servo_ == nullptr)
         return false;
-      if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
+      if (bldc_servo_->status().mode != BldcServo::Mode::kPosition)
         return false;
       bldc_servo_->Command(pending_);
     }
@@ -911,7 +910,7 @@ private:
     if (config_.sync_target_enable == 0) {
       if (bldc_servo_ == nullptr)
         return false;
-      if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
+      if (bldc_servo_->status().mode != BldcServo::Mode::kPosition)
         return false;
       bldc_servo_->Command(pending_);
     }
@@ -924,7 +923,7 @@ private:
     }
     if (bldc_servo_ == nullptr)
       return false;
-    if (bldc_servo_->status().mode == BldcServo::Mode::kFault)
+    if (bldc_servo_->status().mode != BldcServo::Mode::kPosition)
       return false;
     bldc_servo_->Command(pending_);
     return true;
