@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
-#include <string_view>
 #include <mbed.h>
 
 #include "fw/bldc_servo.h"
@@ -12,7 +11,6 @@
 #include "fw/fdcan.h"
 #include "fw/moteus_hw.h"
 #include "fw/torque_model.h"
-#include "mjlib/micro/async_stream.h"
 #include "mjlib/micro/command_manager.h"
 #include "mjlib/multiplex/micro_server.h"
 // using mjlib::micro::CommandManager;
@@ -868,10 +866,7 @@ private:
   }
 
   bool HandleSetHome(int dlc, const char *data) {
-    if (bldc_servo_ == nullptr || persistent_config_ == nullptr) {
-      return false;
-    }
-    if (bldc_servo_->motor_position().homed < MotorPosition::Status::kRotor) {
+    if (bldc_servo_ == nullptr) {
       char reply[4] = {0xFF};
       SendFrame(Send << DirOffset |
                     (multiplex_protocol_->config()->id << NodeOffset) |
@@ -879,42 +874,27 @@ private:
                 4, reply);
       return false;
     }
-    auto *config = bldc_servo_->motor_position_config();
+
+    auto *const config = bldc_servo_->motor_position_config();
+    if (config == nullptr) {
+      char reply[4] = {0xFF};
+      SendFrame(Send << DirOffset |
+                    (multiplex_protocol_->config()->id << NodeOffset) |
+                    CAN_CMD_SET_HOME,
+                4, reply);
+      return false;
+    }
+
+    const float set_value = 0.0f;
     config->output.offset = 0.0f;
-    bldc_servo_->SetOutputPositionNearest(0.0f);
+    bldc_servo_->SetOutputPositionNearest(set_value);
 
     const float cur_output = bldc_servo_->motor_position().position;
-    const float error = 0.0f - cur_output;
+    const float error = set_value - cur_output;
+
     config->output.offset += error * config->output.sign;
 
-    bldc_servo_->SetOutputPositionNearest(0.0f);
-    config_.encoder_offset = static_cast<int32_t>(config->output.offset);
-
-    class NullAsyncWriteStream final : public mjlib::micro::AsyncWriteStream {
-     public:
-      void AsyncWriteSome(const std::string_view& data,
-                          const mjlib::micro::SizeCallback& callback) override {
-        callback({}, data.size());
-      }
-    } null_stream;
-
-    bool write_complete = false;
-    mjlib::micro::error_code write_error;
-    persistent_config_->Command(
-        "write",
-        {&null_stream,
-         [&](mjlib::micro::error_code error) {
-           write_error = error;
-           write_complete = true;
-         }});
-    if (!write_complete || write_error) {
-      char reply[4] = {0xFF};
-      SendFrame(Send << DirOffset |
-                    (multiplex_protocol_->config()->id << NodeOffset) |
-                    CAN_CMD_SET_HOME,
-                4, reply);
-      return false;
-    }
+    bldc_servo_->SetOutputPositionNearest(set_value);
 
     char reply[4] = {0};
     SendFrame(Send << DirOffset |
@@ -1082,44 +1062,7 @@ private:
               8, reply);
     return true;
   }
-  bool HandleSaveAllConfig(int dlc, const char *data) {
-    if (persistent_config_ == nullptr) {
-      char reply[4] = {0xFF};
-      SendFrame(Send << DirOffset |
-                    (multiplex_protocol_->config()->id << NodeOffset) |
-                    CAN_CMD_SAVE_ALL_CONFIG,
-                4, reply);
-      return false;
-    }
-
-    class NullAsyncWriteStream final : public mjlib::micro::AsyncWriteStream {
-     public:
-      void AsyncWriteSome(const std::string_view& data,
-                          const mjlib::micro::SizeCallback& callback) override {
-        callback({}, data.size());
-      }
-    } null_stream;
-
-    bool write_complete = false;
-    mjlib::micro::error_code write_error;
-    persistent_config_->Command(
-        "write",
-        {&null_stream,
-         [&](mjlib::micro::error_code error) {
-           write_error = error;
-           write_complete = true;
-         }});
-
-    char reply[4] = {0};
-    if (!write_complete || write_error) {
-      reply[0] = 0xFF;
-    }
-    SendFrame(Send << DirOffset |
-                  (multiplex_protocol_->config()->id << NodeOffset) |
-                  CAN_CMD_SAVE_ALL_CONFIG,
-              4, reply);
-    return write_complete && !write_error;
-  }
+  bool HandleSaveAllConfig(int dlc, const char *data) { return false; }
   bool HandleResetAllConfig(int dlc, const char *data) { return false; }
   bool HandleHeartbeat(int dlc, const char *data) { return true; }
   bool HandleStartAuto(int dlc, const char *data) {
