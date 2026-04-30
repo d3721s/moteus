@@ -178,7 +178,6 @@ struct Fuda {
       a->Visit(MJ_NVP(protect_i_bus_max));
       a->Visit(MJ_NVP(node_id));
       a->Visit(MJ_NVP(can_baudrate));
-      a->Visit(MJ_NVP(canfd_fastbaudrate));
       a->Visit(MJ_NVP(heartbeat_consumer_ms));
       a->Visit(MJ_NVP(heartbeat_producer_ms));
       a->Visit(MJ_NVP(calib_valid));
