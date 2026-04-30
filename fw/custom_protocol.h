@@ -843,7 +843,6 @@ private:
   bool HandleMotorEnable(int dlc, const char *data) {
     if (bldc_servo_ == nullptr) {
       char reply[4] = {0xFF};
-      reply[0] = 1;
       SendFrame(Send << DirOffset |
                     (multiplex_protocol_->config()->id << NodeOffset) |
                     CAN_CMD_MOTOR_ENABLE,
@@ -851,23 +850,6 @@ private:
       return false;
     }
     if (bldc_servo_->status().mode == BldcServo::Mode::kFault) {
-      char reply[4] = {0xFF};
-      reply[0] = 1;
-      SendFrame(Send << DirOffset |
-                    (multiplex_protocol_->config()->id << NodeOffset) |
-                    CAN_CMD_MOTOR_ENABLE,
-                4, reply);
-      return false;
-    }
-    static BldcServo::CommandData command;
-    command.mode = BldcServo::Mode::kPosition;
-    command.position = std::numeric_limits<float>::quiet_NaN();
-    command.velocity = 0.0f;
-    command.timeout_s = std::numeric_limits<float>::quiet_NaN();
-    bldc_servo_->Command(command);
-
-    if (bldc_servo_->status().mode != BldcServo::Mode::kPosition &&
-        bldc_servo_->status().mode != BldcServo::Mode::kCurrent) {
       int32_t fault_value = static_cast<int32_t>(bldc_servo_->status().fault);
       char reply[4] = {0xFF};
       reply[0] = fault_value & 0xFF;
@@ -879,15 +861,21 @@ private:
                     CAN_CMD_MOTOR_ENABLE,
                 4, reply);
       return false;
-    } else {
-      char reply[4] = {0};
-      SendFrame(Send << DirOffset |
-                    (multiplex_protocol_->config()->id << NodeOffset) |
-                    CAN_CMD_MOTOR_ENABLE,
-                4, reply);
-      return true;
     }
-    return false;
+    if (bldc_servo_->status().mode == BldcServo::Mode::kStop) {
+      static BldcServo::CommandData command;
+      command.mode = BldcServo::Mode::kPosition;
+      command.position = std::numeric_limits<float>::quiet_NaN();
+      command.velocity = 0.0f;
+      command.timeout_s = std::numeric_limits<float>::quiet_NaN();
+      bldc_servo_->Command(command);
+    }
+    char reply[4] = {0};
+    SendFrame(Send << DirOffset |
+                  (multiplex_protocol_->config()->id << NodeOffset) |
+                  CAN_CMD_MOTOR_ENABLE,
+              4, reply);
+    return true;
   }
 
   bool HandleSetTorque(int dlc, const char *data) {
