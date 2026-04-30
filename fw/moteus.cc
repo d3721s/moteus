@@ -192,7 +192,7 @@ int main(void) {
   // Turn on our power light.
   DigitalOut power_led(g_hw_pins.power_led, 1);
 
-  micro::SizedPool<24000> pool;
+  micro::SizedPool<32000> pool;
 
   FDCan fdcan([]() {
       FDCan::Options options;
