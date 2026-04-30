@@ -866,7 +866,8 @@ private:
     command.timeout_s = std::numeric_limits<float>::quiet_NaN();
     bldc_servo_->Command(command);
 
-    if (bldc_servo_->status().mode != BldcServo::Mode::kPosition) {
+    if (bldc_servo_->status().mode != BldcServo::Mode::kPosition &&
+        bldc_servo_->status().mode != BldcServo::Mode::kCurrent) {
       int32_t fault_value = static_cast<int32_t>(bldc_servo_->status().fault);
       char reply[4] = {0xFF};
       reply[0] = fault_value & 0xFF;
