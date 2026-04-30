@@ -1171,31 +1171,71 @@ private:
     return true;
   }
 
-  class NullAsyncWriteStream : public mjlib::micro::AsyncWriteStream {
+  class CommandResponseStream : public mjlib::micro::AsyncWriteStream {
    public:
     void AsyncWriteSome(const std::string_view& data,
                         const mjlib::micro::SizeCallback& callback) override {
+      const auto copy_size =
+          std::min(data.size(), sizeof(buffer_) - size_);
+      std::memcpy(buffer_ + size_, data.data(), copy_size);
+      size_ += copy_size;
       callback({}, data.size());
     }
+
+    bool ok() const {
+      return std::string_view(buffer_, size_) == "OK\r\n";
+    }
+
+   private:
+    char buffer_[16] = {};
+    std::size_t size_ = 0;
   };
+
+  bool ExecutePersistentConfigCommand(const std::string_view& command) {
+    CommandResponseStream stream;
+    bool callback_error = false;
+    persistent_config_->Command(
+        command,
+        mjlib::micro::CommandManager::Response(
+            &stream, [&callback_error](mjlib::micro::error_code error) {
+              callback_error = static_cast<bool>(error);
+            }));
+    return !callback_error && stream.ok();
+  }
 
   bool HandleSaveAllConfig(int dlc, const char *data) {
     if (persistent_config_ == nullptr || multiplex_protocol_ == nullptr) {
       return false;
     }
 
-    NullAsyncWriteStream stream;
-    persistent_config_->Command(
-        "write",
-        mjlib::micro::CommandManager::Response(
-            &stream, [](mjlib::micro::error_code) {}));
-
-    return SendFrame(Send << DirOffset |
+    const int32_t result = ExecutePersistentConfigCommand("write") ? 0 : -1;
+    char reply[4] = {};
+    std::memcpy(reply, &result, sizeof(result));
+    SendFrame(Send << DirOffset |
                          (multiplex_protocol_->config()->id << NodeOffset) |
                          CAN_CMD_SAVE_ALL_CONFIG,
-                     0, nullptr);
+                     4, reply);
+    return true;
   }
-  bool HandleResetAllConfig(int dlc, const char *data) { return false; }
+  bool HandleResetAllConfig(int dlc, const char *data) {
+    if (persistent_config_ == nullptr || multiplex_protocol_ == nullptr) {
+      return false;
+    }
+
+    const int32_t result =
+        ExecutePersistentConfigCommand("default") ? 0 : -1;
+    if (result == 0) {
+      Init();
+    }
+
+    char reply[4] = {};
+    std::memcpy(reply, &result, sizeof(result));
+    SendFrame(Send << DirOffset |
+                         (multiplex_protocol_->config()->id << NodeOffset) |
+                         CAN_CMD_RESET_ALL_CONFIG,
+                     4, reply);
+    return true;
+  }
   bool HandleHeartbeat(int dlc, const char *data) { return true; }
   bool HandleStartAuto(int dlc, const char *data) {
     auto_value_1_enabled_ = (data[0] == 1);
