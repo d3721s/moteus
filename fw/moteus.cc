@@ -261,6 +261,9 @@ int main(void) {
       &pool, &command_manager, &telemetry_manager, &multiplex_protocol,
       moteus_controller.bldc_servo());
 
+  GitInfo git_info;
+  telemetry_manager.Register("git", &git_info);
+  
   CanConfig can_config, old_can_config;
 
   Fuda fuda;
@@ -274,8 +277,6 @@ int main(void) {
   fdcan_micro_server.SetCustomHandler(
       CustomProtocol::CallbackTrampoline, &custom_protocol);
 
-  GitInfo git_info;
-  telemetry_manager.Register("git", &git_info);
 
   // We always want to update our filters at least once.
   uint8_t old_multiplex_id = 255;
