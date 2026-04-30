@@ -279,10 +279,12 @@ int main(void) {
 
   // We always want to update our filters at least once.
   uint8_t old_multiplex_id = 255;
+  bool fuda_can_bitrate_applied = false;
 
   const auto maybe_update_filters =
       [&can_config, &fdcan, &multi_transport, &old_can_config,
-       &old_multiplex_id, &multiplex_protocol]() {
+       &old_multiplex_id, &multiplex_protocol, &fuda,
+       &fuda_can_bitrate_applied]() {
         // Prevent the ID from being set to an unusable value.
         if (multiplex_protocol.config()->id < 1 ||
             multiplex_protocol.config()->id > 126) {
@@ -299,7 +301,12 @@ int main(void) {
         old_can_config = can_config;
         old_multiplex_id = multiplex_protocol.config()->id;
 
-        FDCan::Filter filters[4] = {};
+        if (!fuda_can_bitrate_applied && fuda.config()->can_baudrate > 0) {
+          fdcan.SetFastBitrate(fuda.config()->can_baudrate);
+          fuda_can_bitrate_applied = true;
+        }
+
+        static FDCan::Filter filters[4] = {};
         filters[0].id1 = (can_config.prefix << 16) | old_multiplex_id;
         filters[0].id2 = 0x1fff00ffu;
         filters[0].mode = FDCan::FilterMode::kMask;
@@ -342,9 +349,6 @@ int main(void) {
   persistent_config.Load();
 
   custom_protocol.Init();
-  if (fuda.config()->can_baudrate > 0) {
-    fdcan.SetFastBitrate(fuda.config()->can_baudrate);
-  }
 
   moteus_controller.Start();
   command_manager.AsyncStart();
