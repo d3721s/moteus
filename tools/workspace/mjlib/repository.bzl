@@ -16,10 +16,11 @@
 
 load("//tools/workspace:github_archive.bzl", "github_archive")
 
+
 def mjlib_repository(name):
     github_archive(
-        name = name,
-        repo = "mjbots/mjlib",
-        commit = "bb74cc8791d42695ab6f7213cc875c07c49c855b",
-        sha256 = "3e0ad60b4a8681ff1c2f52298628ebbb881d4f29ffe0489227d0684f524cb66e",
+        name=name,
+        repo="d3721s/mjlib",
+        commit="8c5e7a4fd79704deb1792349855a748e85755b3f",
+        sha256="3e0ad60b4a8681ff1c2f52298628ebbb881d4f29ffe0489227d0684f524cb66e",
     )
