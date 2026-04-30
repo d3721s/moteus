@@ -137,7 +137,6 @@ struct Fuda {
     float protect_i_bus_max = 0.0f;            // 2.5 index 29 protect_i_bus_max
     int32_t node_id = 0;                       // 2.5 index 30 node_id
     int32_t can_baudrate = 0;                  // 2.5 index 31 can_baudrate
-    int32_t canfd_fastbaudrate = 0;            // Fuda扩展: CAN-FD data phase bitrate
     int32_t heartbeat_consumer_ms = 0;         // 2.5 index 32 heartbeat_consumer_ms
     int32_t heartbeat_producer_ms = 0;         // 2.5 index 33 heartbeat_producer_ms
     int32_t calib_valid = 0;                   // 2.5 index 34 calib_valid
