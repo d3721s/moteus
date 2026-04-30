@@ -318,7 +318,10 @@ private:
     if (bldc_servo_ == nullptr) {
       return 0;
     }
-
+    if ((bldc_servo_->status().fault > errc::kVelocityControlError) ||
+        (bldc_servo_->status().fault == errc::kSuccess)) {
+      return 0;
+    }
     switch (bldc_servo_->status().fault) {
     case errc::kOverVoltage:
       return ErrorOverVoltage;
@@ -328,8 +331,6 @@ private:
       return ErrorOverCurrent;
     case errc::kEncoderFault:
       return ErrorEncoderOffline;
-    case errc::kSuccess:
-      return 0;
     default:
       return ErrorOther;
     }
