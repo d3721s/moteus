@@ -264,7 +264,7 @@ int main(void) {
   GitInfo git_info;
   telemetry_manager.Register("git", &git_info);
   
-  CanConfig can_config, old_can_config;
+  CanConfig can_config;
 
   Fuda fuda;
   persistent_config.Register("fuda", fuda.config(), []() {});
@@ -277,77 +277,20 @@ int main(void) {
   fdcan_micro_server.SetCustomHandler(
       CustomProtocol::CallbackTrampoline, &custom_protocol);
 
+  persistent_config.Register("id", multiplex_protocol.config(), []() {});
 
-  // We always want to update our filters at least once.
-  uint8_t old_multiplex_id = 255;
-  bool fuda_can_bitrate_applied = false;
-
-  const auto maybe_update_filters =
-      [&can_config, &fdcan, &multi_transport, &old_can_config,
-       &old_multiplex_id, &multiplex_protocol, &fuda,
-       &fuda_can_bitrate_applied]() {
-        // Prevent the ID from being set to an unusable value.
-        if (multiplex_protocol.config()->id < 1 ||
-            multiplex_protocol.config()->id > 126) {
-          multiplex_protocol.config()->id = 1;
-        }
-
-        // We only update our config if it has actually changed.
-        // Re-initializing the CAN-FD controller can cause packets to
-        // be lost, so don't do it unless actually necessary.
-        if (can_config == old_can_config &&
-            multiplex_protocol.config()->id == old_multiplex_id) {
-          return;
-        }
-        old_can_config = can_config;
-        old_multiplex_id = multiplex_protocol.config()->id;
-
-        if (!fuda_can_bitrate_applied && fuda.config()->can_baudrate > 0) {
-          fdcan.SetFastBitrate(fuda.config()->can_baudrate);
-          fuda_can_bitrate_applied = true;
-        }
-
-        static FDCan::Filter filters[4] = {};
-        filters[0].id1 = (can_config.prefix << 16) | old_multiplex_id;
-        filters[0].id2 = 0x1fff00ffu;
-        filters[0].mode = FDCan::FilterMode::kMask;
-        filters[0].action = FDCan::FilterAction::kAccept;
-        filters[0].type = FDCan::FilterType::kExtended;
-
-        filters[1].id1 = (can_config.prefix << 16) | 0x7f;
-        filters[1].id2 = 0x1fff00ffu;
-        filters[1].mode = FDCan::FilterMode::kMask;
-        filters[1].action = FDCan::FilterAction::kAccept;
-        filters[1].type = FDCan::FilterType::kExtended;
-
-        filters[2].id1 = (can_config.prefix << 16) | old_multiplex_id;
-        filters[2].id2 = 0x1fff00ffu;
-        filters[2].mode = FDCan::FilterMode::kMask;
-        filters[2].action = FDCan::FilterAction::kAccept;
-        filters[2].type = FDCan::FilterType::kStandard;
-
-        filters[3].id1 = (can_config.prefix << 16) | 0x7f;
-        filters[3].id2 = 0x1fff00ffu;
-        filters[3].mode = FDCan::FilterMode::kMask;
-        filters[3].action = FDCan::FilterAction::kAccept;
-        filters[3].type = FDCan::FilterType::kStandard;
-
-        FDCan::FilterConfig filter_config;
-        filter_config.begin = std::begin(filters);
-        filter_config.end = std::end(filters);
-        filter_config.global_std_action = FDCan::FilterAction::kAccept;
-        filter_config.global_ext_action = FDCan::FilterAction::kAccept;
-        fdcan.ConfigureFilters(filter_config);
-
-        // Set prefix on both CAN-FD and UART transports
-        multi_transport.SetPrefix(can_config.prefix);
-      };
-
-  persistent_config.Register("id", multiplex_protocol.config(), maybe_update_filters);
-
-  persistent_config.Register("can", &can_config, maybe_update_filters);
+  persistent_config.Register("can", &can_config, []() {});
 
   persistent_config.Load();
+
+  if (multiplex_protocol.config()->id < 1 ||
+      multiplex_protocol.config()->id > 126) {
+    multiplex_protocol.config()->id = 1;
+  }
+
+  if (fuda.config()->can_baudrate > 0) {
+    fdcan.SetFastBitrate(fuda.config()->can_baudrate);
+  }
 
   custom_protocol.Init();
 
