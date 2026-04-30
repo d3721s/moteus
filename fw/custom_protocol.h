@@ -1227,7 +1227,17 @@ private:
     return true;
   }
   bool HandleResetAllConfig(int dlc, const char *data) {
-    if (persistent_config_ == nullptr || multiplex_protocol_ == nullptr) {
+    if (persistent_config_ == nullptr || multiplex_protocol_ == nullptr ||
+        bldc_servo_ == nullptr) {
+      return false;
+    }
+
+    if (bldc_servo_->status().mode != BldcServo::Mode::kStopped) {
+      char reply[4] = {0xff};
+      SendFrame(Send << DirOffset |
+                         (multiplex_protocol_->config()->id << NodeOffset) |
+                         CAN_CMD_RESET_ALL_CONFIG,
+                     4, reply);
       return false;
     }
 
