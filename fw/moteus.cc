@@ -263,18 +263,19 @@ int main(void) {
 
   CanConfig can_config, old_can_config;
 
+  Fuda fuda;
+  persistent_config.Register("fuda", fuda.config(), []() {});
+  telemetry_manager.Register("fuda", &fuda);
+
   CustomProtocol custom_protocol(&multiplex_protocol,
                                   moteus_controller.bldc_servo(),
-                                  &fdcan, &persistent_config);
+                                  &fdcan, &persistent_config,
+                                  fuda.config());
   fdcan_micro_server.SetCustomHandler(
       CustomProtocol::CallbackTrampoline, &custom_protocol);
 
   GitInfo git_info;
   telemetry_manager.Register("git", &git_info);
-
-  Fuda fuda;
-  persistent_config.Register("fuda", fuda.config(), []() {});
-  telemetry_manager.Register("fuda", &fuda);
 
   // We always want to update our filters at least once.
   uint8_t old_multiplex_id = 255;

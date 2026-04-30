@@ -12,6 +12,7 @@
 #include "fw/bldc_servo.h"
 #include "fw/error.h"
 #include "fw/fdcan.h"
+#include "fw/fuda.h"
 #include "fw/moteus_hw.h"
 #include "fw/torque_model.h"
 #include "mjlib/micro/command_manager.h"
@@ -24,9 +25,11 @@ class CustomProtocol {
 public:
   CustomProtocol(mjlib::multiplex::MicroServer *multiplex_protocol,
                  BldcServo *bldc_servo, FDCan *fdcan,
-                 mjlib::micro::PersistentConfig *persistent_config)
+                 mjlib::micro::PersistentConfig *persistent_config,
+                 Fuda::Config *fuda_config)
       : multiplex_protocol_(multiplex_protocol), bldc_servo_(bldc_servo),
-        fdcan_(fdcan), persistent_config_(persistent_config) {}
+        fdcan_(fdcan), persistent_config_(persistent_config),
+        fuda_config_(fuda_config) {}
 
   static bool CallbackTrampoline(uint32_t can_id, int dlc, const char *data,
                                  void *context) {
@@ -77,7 +80,13 @@ public:
     config_.protect_over_current = servo_config.max_current_A;
     config_.protect_i_bus_max = CleanFloat(servo_config.max_regen_power_W);
     config_.node_id = multiplex_protocol_->config()->id;
-    config_.can_baudrate = fdcan_ != nullptr ? fdcan_->fast_bitrate() : 0;
+    config_.can_baudrate =
+        fuda_config_ != nullptr && fuda_config_->can_baudrate > 0
+            ? fuda_config_->can_baudrate
+            : (fdcan_ != nullptr ? fdcan_->fast_bitrate() : 0);
+    if (fdcan_ != nullptr && config_.can_baudrate > 0) {
+      fdcan_->SetFastBitrate(config_.can_baudrate);
+    }
     config_.heartbeat_consumer_ms = 0;
     config_.heartbeat_producer_ms = 0;
     config_.calib_valid = 0;
@@ -532,6 +541,9 @@ private:
 
     if (index == CONFIG_CAN_BAUDRATE && fdcan_ != nullptr &&
         config_.can_baudrate > 0) {
+      if (fuda_config_ != nullptr) {
+        fuda_config_->can_baudrate = config_.can_baudrate;
+      }
       fdcan_->SetFastBitrate(config_.can_baudrate);
     }
   }
@@ -1297,6 +1309,7 @@ private:
   BldcServo *const bldc_servo_;
   FDCan *const fdcan_;
   mjlib::micro::PersistentConfig *const persistent_config_;
+  Fuda::Config *const fuda_config_;
 
   BldcServo::CommandData pending_;
   InputCommand input_;
