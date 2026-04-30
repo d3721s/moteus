@@ -862,7 +862,7 @@ private:
                 4, reply);
       return false;
     }
-    if (bldc_servo_->status().mode == BldcServo::Mode::kStop) {
+    if (bldc_servo_->status().mode == BldcServo::Mode::kStopped) {
       static BldcServo::CommandData command;
       command.mode = BldcServo::Mode::kPosition;
       command.position = std::numeric_limits<float>::quiet_NaN();
