@@ -1218,7 +1218,7 @@ private:
     }
 
     const int32_t result = ExecutePersistentConfigCommand("write") ? 0 : -1;
-    char reply[4] = {};
+    char reply[4] = {0};
     std::memcpy(reply, &result, sizeof(result));
     SendFrame(Send << DirOffset |
                          (multiplex_protocol_->config()->id << NodeOffset) |
@@ -1237,7 +1237,7 @@ private:
       Init();
     }
 
-    char reply[4] = {};
+    char reply[4] = {0};
     std::memcpy(reply, &result, sizeof(result));
     SendFrame(Send << DirOffset |
                          (multiplex_protocol_->config()->id << NodeOffset) |
