@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <string_view>
 #include <mbed.h>
 
 #include "fw/bldc_servo.h"
@@ -1169,7 +1170,31 @@ private:
               8, reply);
     return true;
   }
-  bool HandleSaveAllConfig(int dlc, const char *data) { return false; }
+
+  class NullAsyncWriteStream : public mjlib::micro::AsyncWriteStream {
+   public:
+    void AsyncWriteSome(const std::string_view& data,
+                        const mjlib::micro::SizeCallback& callback) override {
+      callback({}, data.size());
+    }
+  };
+
+  bool HandleSaveAllConfig(int dlc, const char *data) {
+    if (persistent_config_ == nullptr || multiplex_protocol_ == nullptr) {
+      return false;
+    }
+
+    NullAsyncWriteStream stream;
+    persistent_config_->Command(
+        "write",
+        mjlib::micro::CommandManager::Response(
+            &stream, [](mjlib::micro::error_code) {}));
+
+    return SendFrame(Send << DirOffset |
+                         (multiplex_protocol_->config()->id << NodeOffset) |
+                         CAN_CMD_SAVE_ALL_CONFIG,
+                     0, nullptr);
+  }
   bool HandleResetAllConfig(int dlc, const char *data) { return false; }
   bool HandleHeartbeat(int dlc, const char *data) { return true; }
   bool HandleStartAuto(int dlc, const char *data) {
