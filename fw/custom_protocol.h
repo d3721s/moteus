@@ -84,9 +84,6 @@ public:
         fuda_config_ != nullptr && fuda_config_->can_baudrate > 0
             ? fuda_config_->can_baudrate
             : (fdcan_ != nullptr ? fdcan_->fast_bitrate() : 0);
-    if (fdcan_ != nullptr && config_.can_baudrate > 0) {
-      fdcan_->SetFastBitrate(config_.can_baudrate);
-    }
     config_.heartbeat_consumer_ms = 0;
     config_.heartbeat_producer_ms = 0;
     config_.calib_valid = 0;
@@ -539,12 +536,10 @@ private:
       }
     }
 
-    if (index == CONFIG_CAN_BAUDRATE && fdcan_ != nullptr &&
-        config_.can_baudrate > 0) {
+    if (index == CONFIG_CAN_BAUDRATE && config_.can_baudrate > 0) {
       if (fuda_config_ != nullptr) {
         fuda_config_->can_baudrate = config_.can_baudrate;
       }
-      fdcan_->SetFastBitrate(config_.can_baudrate);
     }
   }
 

@@ -342,6 +342,9 @@ int main(void) {
   persistent_config.Load();
 
   custom_protocol.Init();
+  if (fuda.config()->can_baudrate > 0) {
+    fdcan.SetFastBitrate(fuda.config()->can_baudrate);
+  }
 
   moteus_controller.Start();
   command_manager.AsyncStart();
