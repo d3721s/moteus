@@ -257,6 +257,13 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
     return motor_position_->config();
   }
 
+  void ApplyMotorPositionConfig() {
+    motor_position_->ApplyConfig();
+    main_motor_position_epoch_ = motor_position_->status().epoch;
+    isr_motor_position_epoch_ = motor_position_->status().epoch;
+    UpdateConfig();
+  }
+
   bool is_torque_constant_configured() const {
     return motor_.Kv != 0.0f;
   }
@@ -1507,6 +1514,10 @@ MotorPosition::Config* BldcServo::motor_position_config() {
 
 const MotorPosition::Config* BldcServo::motor_position_config() const {
   return impl_->motor_position_config();
+}
+
+void BldcServo::ApplyMotorPositionConfig() {
+  impl_->ApplyMotorPositionConfig();
 }
 
 void BldcServo::SetOutputPositionNearest(float position) {

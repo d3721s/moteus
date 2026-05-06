@@ -456,6 +456,8 @@ private:
           position_config->output.sign =
               config_.invert_motor_dir != 0 ? -1 : 1;
           config_.encoder_dir = config_.invert_motor_dir;
+          bldc_servo_->ApplyMotorPositionConfig();
+          bldc_servo_->RecapturePositionVelocity();
         }
         break;
       }
@@ -561,6 +563,8 @@ private:
         if (position_config != nullptr) {
           position_config->output.sign = config_.encoder_dir != 0 ? -1 : 1;
           config_.invert_motor_dir = config_.encoder_dir;
+          bldc_servo_->ApplyMotorPositionConfig();
+          bldc_servo_->RecapturePositionVelocity();
         }
         break;
       }

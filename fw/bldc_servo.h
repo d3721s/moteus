@@ -105,6 +105,7 @@ class BldcServo {
   const MotorPosition::Status& motor_position() const;
   MotorPosition::Config* motor_position_config();
   const MotorPosition::Config* motor_position_config() const;
+  void ApplyMotorPositionConfig();
 
   void SetOutputPositionNearest(float position);
   void SetOutputPosition(float position);
