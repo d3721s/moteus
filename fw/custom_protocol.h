@@ -515,10 +515,16 @@ private:
         servo_config.max_current_desired_rate = config_.torque_ramp_rate;
         break;
       }
-      case CONFIG_VELOCITY_RAMP_RATE:
-      case CONFIG_PROFILE_ACCEL:
-      case CONFIG_PROFILE_DECEL: {
+      case CONFIG_VELOCITY_RAMP_RATE: {
         servo_config.default_accel_limit = config_.velocity_ramp_rate;
+        break;
+      }
+      case CONFIG_PROFILE_ACCEL: {
+        servo_config.default_accel_limit = config_.profile_accel;
+        break;
+      }
+      case CONFIG_PROFILE_DECEL: {
+        servo_config.default_accel_limit = config_.profile_decel;
         break;
       }
       case CONFIG_PROFILE_VELOCITY: {
@@ -706,9 +712,14 @@ private:
     case CONFIG_PROTECT_I_BUS_MAX:
       config_.protect_i_bus_max = ToFloat(raw_value);
       break;
-    case CONFIG_NODE_ID:
-      config_.node_id = ToInt32(raw_value);
+    case CONFIG_NODE_ID: {
+      const int32_t value = ToInt32(raw_value);
+      if (value < 1 || value > 126) {
+        return false;
+      }
+      config_.node_id = value;
       break;
+    }
     case CONFIG_CAN_BAUDRATE: {
       config_.can_baudrate = ToInt32(raw_value);
       if (config_.can_baudrate <= 0) {
