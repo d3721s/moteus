@@ -72,7 +72,8 @@ public:
     const auto *position_config = bldc_servo_->motor_position_config();
 
     config_.invert_motor_dir =
-        position_config != nullptr ? position_config->output.sign : 0;
+        position_config != nullptr ?
+        (position_config->output.sign < 0 ? 1 : 0) : 0;
     config_.inertia = servo_config.inertia_feedforward;
     config_.torque_constant = torque_model.torque_constant_;
     config_.motor_pole_pairs = motor.poles / 2;
@@ -99,7 +100,7 @@ public:
     config_.protect_i_bus_max = CleanFloat(servo_config.max_regen_power_W);
 
     if (position_config != nullptr) {
-      config_.encoder_dir = position_config->output.sign;
+      config_.encoder_dir = position_config->output.sign < 0 ? 1 : 0;
       config_.encoder_offset =
           static_cast<int32_t>(position_config->output.offset);
     } else {
@@ -431,7 +432,8 @@ private:
       switch (index) {
       case CONFIG_INVERT_MOTOR_DIR: {
         if (position_config != nullptr) {
-          position_config->output.sign = config_.invert_motor_dir;
+          position_config->output.sign =
+              config_.invert_motor_dir != 0 ? -1 : 1;
         }
         break;
       }
@@ -529,7 +531,7 @@ private:
       }
       case CONFIG_ENCODER_DIR: {
         if (position_config != nullptr) {
-          position_config->output.sign = config_.encoder_dir;
+          position_config->output.sign = config_.encoder_dir != 0 ? -1 : 1;
         }
         break;
       }
@@ -554,9 +556,14 @@ private:
 
   bool SetConfigRaw(uint32_t index, uint32_t raw_value) {
     switch (index) {
-    case CONFIG_INVERT_MOTOR_DIR:
-      config_.invert_motor_dir = ToInt32(raw_value);
+    case CONFIG_INVERT_MOTOR_DIR: {
+      const int32_t value = ToInt32(raw_value);
+      if (value != 0 && value != 1) {
+        return false;
+      }
+      config_.invert_motor_dir = value;
       break;
+    }
     case CONFIG_INERTIA:
       config_.inertia = ToFloat(raw_value);
       break;
@@ -660,9 +667,14 @@ private:
     case CONFIG_CALIB_VALID:
       config_.calib_valid = ToInt32(raw_value);
       break;
-    case CONFIG_ENCODER_DIR:
-      config_.encoder_dir = ToInt32(raw_value);
+    case CONFIG_ENCODER_DIR: {
+      const int32_t value = ToInt32(raw_value);
+      if (value != 0 && value != 1) {
+        return false;
+      }
+      config_.encoder_dir = value;
       break;
+    }
     case CONFIG_ENCODER_OFFSET:
       config_.encoder_offset = ToInt32(raw_value);
       break;
@@ -1176,6 +1188,8 @@ private:
     uint32_t index = 0;
     uint32_t raw_value = 0;
     std::memcpy(&index, data, sizeof(index));
+
+    SyncConfigFromServo();
 
     if (!GetConfigRaw(index, &raw_value)) {
       return false;
