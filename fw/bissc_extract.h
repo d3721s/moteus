@@ -74,6 +74,12 @@ static constexpr uint8_t kBisscCrc6Table[64] = {
 // Compute CRC-6 for BiSS-C data using table-based approach.
 // Polynomial: x^6 + x + 1 (0x43)
 // Reference: RLS application note E201D02 "Decoding the BiSS information"
+//
+// Restriction: the table-based path processes up to 60 input bits.
+// Higher bits of `data` are silently ignored.  Callers must therefore
+// keep `data_bits <= 60`.  ExtractBisscFrame's CRC input includes the
+// 2 status bits, so the BiSS-C config layer caps data_bits at 58
+// (kMaxDataBits in fw/bissc.h).
 inline uint32_t ComputeBisscCRC(uint64_t data, uint8_t data_bits, uint8_t crc_bits) {
   if (crc_bits == 0) { return 0; }
 

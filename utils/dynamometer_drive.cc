@@ -1526,7 +1526,7 @@ class Application {
                   current_torque_Nm_, expected_torque, 0.15));
         }
       }
-      dut_->Command("d stop");
+      co_await dut_->Command("d stop");
     }
 
     // Now we'll test kd.

@@ -385,15 +385,23 @@ MoteusHwPins FindHardwarePins(FamilyAndVersion fv) {
   return result;
 }
 
+// NOTE: This must remain safe to call from a HardFault context.  That
+// means: no dynamic allocation, no locks, no recursion, no reliance on
+// C++ static constructors that may not yet have run, and no calls into
+// mbed helpers that assert on `NC` pins.  If `g_hw_pins` has not been
+// populated yet, all DRV8323 control pins are `NC` -- but in that
+// window the GPIOs are still in MCU reset state and the on-board
+// pull-downs hold the driver off, so there is nothing to disable.
 void MoteusEnsureOff() {
-  gpio_t power;
-  gpio_init_out(&power, moteus::g_hw_pins.drv8323_hiz);
-  gpio_write(&power, 0);
+  if (moteus::g_hw_pins.drv8323_enable != NC) {
+    gpio_t power;
+    gpio_init_out(&power, moteus::g_hw_pins.drv8323_hiz);
+    gpio_write(&power, 0);
 
-  // Also, disable the DRV8323 entirely, because, hey, why not.
-  gpio_t enable;
-  gpio_init_out(&enable, moteus::g_hw_pins.drv8323_enable);
-  gpio_write(&enable, 0);
+    // Also, disable the DRV8323 entirely, because, hey, why not.
+    gpio_t enable;
+    gpio_init_out(&enable, moteus::g_hw_pins.drv8323_enable);
+    gpio_write(&enable, 0);
 
   // We want to ensure that our primary interrupt is not running.
   // Which one it is could vary, so just turn them all off.

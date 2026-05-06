@@ -286,7 +286,8 @@ cc_binary(
     srcs=[
         "test/hall_filter_test.cc",
     ],
-    deps=[
+    testonly = True,
+    deps = [
         "@boost//:test",
         "//fw:common",
         "@com_github_mjbots_mjlib//mjlib/base:clipp",
@@ -303,7 +304,7 @@ cc_binary(
     srcs=[
         "test/encoder_bandwidth_test.cc",
     ],
-    deps=[
+    testonly = True,
         "@boost//:test",
         "//fw:common",
         "@com_github_mjbots_mjlib//mjlib/base:clipp",

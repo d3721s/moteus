@@ -41,6 +41,7 @@ async def main():
     parser.add_argument('--scale', default=1.3, type=float)
     parser.add_argument('--count', default=30, type=int)
     parser.add_argument('--min-vel-std', default=0.003, type=float)
+    parser.add_argument('--finish-metric', default=500, type=float)
 
     args = parser.parse_args()
 
@@ -48,12 +49,19 @@ async def main():
     c = moteus.Controller(id=args.target, transport=transport)
     s = moteus.Stream(c)
 
+    await s.write_message(b'tel stop')
+    await s.flush_read()
+
     pll_filter_hz = float(await s.command(b'conf get motor_position.sources.0.pll_filter_hz', allow_any_response=True))
     if pll_filter_hz < 400:
         raise RuntimeError(f'The controller must be calibrated with >= 400Hz BW, measured {pll_filter_hz}')
 
     # We do not want any max desired rate interfering with our tests.
-    await s.command(b'conf set servo.pid_dq.max_desired_rate 10000000')
+    try:
+        await s.command(b'conf set servo.max_current_desired_rate 10000000')
+    except moteus.CommandError:
+        # Try the older spelling
+        await s.command(b'conf set servo.pid_dq.max_desired_rate 10000000')
 
     try:
         await run_test(args, c)
@@ -112,7 +120,7 @@ async def run_test(args, c):
         end_velocity = trace[-1][1].values[moteus.Register.VELOCITY]
 
         if last_end_velocity is not None:
-            velocity_threshold = 500 * velocity_std
+            velocity_threshold = args.finish_metric * velocity_std
             if (delta_velocity > velocity_threshold and
                 end_velocity < scale_threshold * last_end_velocity):
                 print(f"Finish because delta_velocity ({delta_velocity}) > ({velocity_threshold}) and end_velocity < {scale_threshold} * last")

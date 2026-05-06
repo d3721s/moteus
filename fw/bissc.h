@@ -274,10 +274,9 @@ class BissC {
       // That ensures that we maintain the ~20us BiSS-C minimum idle
       // time.
       const uint32_t now_us = timer_->read_us();
-      const int16_t delta_us =
-          static_cast<int16_t>(now_us - last_query_start_us_);
+      const uint32_t delta_us = now_us - last_query_start_us_;
 
-      if (delta_us >= config_.poll_rate_us) {
+      if (delta_us >= static_cast<uint32_t>(config_.poll_rate_us)) {
         ISR_StartRead();
       }
     }
@@ -355,7 +354,9 @@ class BissC {
 
   // BiSS-C protocol limits
   static constexpr uint32_t kMaxAckBits = 20;
-  static constexpr uint32_t kMaxDataBits = 64;
+  // Capped so that data_bits + status_bits (2) fits in the 60 input
+  // bits the table-based ComputeBisscCRC can process.
+  static constexpr uint32_t kMaxDataBits = 58;
   static constexpr uint32_t kMaxCrcBits = 6;
   static constexpr uint32_t kStartBits = 1;
   static constexpr uint32_t kCdsBits = 1;

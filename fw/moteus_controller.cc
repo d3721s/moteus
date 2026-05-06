@@ -606,7 +606,7 @@ class MoteusController::Impl : public multiplex::MicroServer::Server {
     switch (static_cast<Register>(reg)) {
       case Register::kMode: {
         const auto new_mode_int = ReadIntMapping(value);
-        if (new_mode_int > static_cast<int8_t>(BldcServo::Mode::kNumModes)) {
+        if (new_mode_int >= static_cast<int8_t>(BldcServo::Mode::kNumModes)) {
           return kUnknownRegister;
         }
         command_valid_ = true;

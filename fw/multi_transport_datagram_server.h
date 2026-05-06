@@ -84,21 +84,24 @@ class MultiTransportDatagramServer : public mjlib::multiplex::MicroDatagramServe
     clean_query_header.flags &= ~kTransportIdMask;
 
     if (transport_id == kTransportIdUart) {
+      if (!uart_server_) {
+        callback(errc::kUartOverrunError, 0);
+        return;
+      }
+
       // Store the callback so we can invoke it if UART is destroyed
       pending_uart_write_callback_ = callback;
       pending_uart_write_size_ = data.size();
 
-      if (uart_server_) {
-        uart_server_->AsyncWrite(
-            header, data, clean_query_header,
-            [this](mjlib::micro::error_code ec, size_t size) {
-              auto cb = pending_uart_write_callback_;
-              pending_uart_write_callback_ = {};
-              if (cb) {
-                cb(ec, size);
-              }
-            });
-      }
+      uart_server_->AsyncWrite(
+          header, data, clean_query_header,
+          [this](mjlib::micro::error_code ec, size_t size) {
+            auto cb = pending_uart_write_callback_;
+            pending_uart_write_callback_ = {};
+            if (cb) {
+              cb(ec, size);
+            }
+          });
     } else {
       fdcan_->AsyncWrite(header, data, clean_query_header, callback);
     }
