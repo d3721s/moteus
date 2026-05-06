@@ -64,8 +64,7 @@ public:
         fuda_config_ != nullptr && fuda_config_->heartbeat_producer_ms > 0
             ? fuda_config_->heartbeat_producer_ms
             : 0;
-    config_.calib_valid =
-        fuda_config_ != nullptr ? fuda_config_->calib_valid : 0;
+    config_.calib_valid = 0;
     config_.offset_lut = 0;
 
     SyncConfigFromServo();
@@ -109,6 +108,8 @@ public:
     config_.protect_over_current = servo_config.max_current_A;
     config_.protect_i_bus_max = CleanFloat(servo_config.max_regen_power_W);
     config_.node_id = multiplex_protocol_->config()->id;
+    config_.calib_valid =
+        motor.poles != 0 && (motor.poles % 2) == 0 ? 1 : 0;
 
     if (position_config != nullptr) {
       config_.encoder_dir = position_config->output.sign < 0 ? 1 : 0;
@@ -577,11 +578,6 @@ private:
     if (index == CONFIG_CALIB_VOLTAGE) {
       if (fuda_config_ != nullptr) {
         fuda_config_->calib_voltage = config_.calib_voltage;
-      }
-    }
-    if (index == CONFIG_CALIB_VALID) {
-      if (fuda_config_ != nullptr) {
-        fuda_config_->calib_valid = config_.calib_valid;
       }
     }
     if (index == CONFIG_HEARTBEAT_PRODUCER_MS &&
