@@ -1,0 +1,41 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+bin/
+obj/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Qt Creator generated files
+*.user
+*.user.*
+.qtc_clangd/
+
+# Compiled objects and libraries
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
+
+# Generated debug and dependency files
+*.d
+*.pdb
+*.ilk
+*.exp
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
