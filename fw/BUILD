@@ -305,6 +305,7 @@ cc_binary(
         "test/encoder_bandwidth_test.cc",
     ],
     testonly = True,
+    deps = [
         "@boost//:test",
         "//fw:common",
         "@com_github_mjbots_mjlib//mjlib/base:clipp",
