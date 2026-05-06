@@ -20,11 +20,6 @@ qt_add_executable(fuda_tool
     protocol.h
 )
 
-qt_add_translations(
-    TARGETS fuda_tool
-    TS_FILES fuda_tool_en_US.ts
-)
-
 target_link_libraries(fuda_tool
     PRIVATE
         Qt::Core
