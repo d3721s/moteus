@@ -42,6 +42,30 @@ public:
       return;
     }
 
+    config_.calib_current = 0.0f;
+    config_.calib_voltage = 0.0f;
+    config_.control_mode = 0;
+    config_.sync_target_enable = 0;
+    config_.position_filter_bw = 0.0f;
+    config_.protect_under_voltage = 0.0f;
+    config_.node_id = multiplex_protocol_->config()->id;
+    config_.can_baudrate =
+        fuda_config_ != nullptr && fuda_config_->can_baudrate > 0
+            ? fuda_config_->can_baudrate
+            : (fdcan_ != nullptr ? fdcan_->fast_bitrate() : 0);
+    config_.heartbeat_consumer_ms = 0;
+    config_.heartbeat_producer_ms = 0;
+    config_.calib_valid = 0;
+    config_.offset_lut = 0;
+
+    SyncConfigFromServo();
+  }
+
+  void SyncConfigFromServo() {
+    if (bldc_servo_ == nullptr) {
+      return;
+    }
+
     const auto &servo_config = bldc_servo_->config();
     const auto &motor = bldc_servo_->motor();
     const auto &torque_model = bldc_servo_->torque_model();
@@ -56,37 +80,23 @@ public:
     config_.motor_phase_inductance = motor.inductance_d_H;
     config_.current_limit = servo_config.max_current_A;
     config_.velocity_limit = servo_config.max_velocity;
-    config_.calib_current = 0.0f;
-    config_.calib_voltage = 0.0f;
-    config_.control_mode = 0;
     config_.pos_gain = servo_config.pid_position.kp;
     config_.vel_gain = servo_config.pid_position.kd;
     config_.vel_integrator_gain = servo_config.pid_position.ki;
     config_.current_ctrl_bw = servo_config.pid_dq_hz;
     config_.anticogging_enable = motor.cogging_dq_scale != 0.0f;
-    config_.sync_target_enable = 0;
     config_.target_velocity_window =
         CleanFloat(servo_config.fault_velocity_error);
     config_.target_position_window =
         CleanFloat(servo_config.fault_position_error);
     config_.torque_ramp_rate = servo_config.max_current_desired_rate;
     config_.velocity_ramp_rate = servo_config.default_accel_limit;
-    config_.position_filter_bw = 0.0f;
     config_.profile_velocity = CleanFloat(servo_config.default_velocity_limit);
     config_.profile_accel = servo_config.default_accel_limit;
     config_.profile_decel = servo_config.default_accel_limit;
-    config_.protect_under_voltage = 0.0f;
     config_.protect_over_voltage = servo_config.max_voltage;
     config_.protect_over_current = servo_config.max_current_A;
     config_.protect_i_bus_max = CleanFloat(servo_config.max_regen_power_W);
-    config_.node_id = multiplex_protocol_->config()->id;
-    config_.can_baudrate =
-        fuda_config_ != nullptr && fuda_config_->can_baudrate > 0
-            ? fuda_config_->can_baudrate
-            : (fdcan_ != nullptr ? fdcan_->fast_bitrate() : 0);
-    config_.heartbeat_consumer_ms = 0;
-    config_.heartbeat_producer_ms = 0;
-    config_.calib_valid = 0;
 
     if (position_config != nullptr) {
       config_.encoder_dir = position_config->output.sign;
@@ -96,7 +106,6 @@ public:
       config_.encoder_dir = 0;
       config_.encoder_offset = 0;
     }
-    config_.offset_lut = 0;
   }
 
   void PollMillisecond() {
@@ -674,7 +683,9 @@ private:
       *raw_value = ToRaw(config_.invert_motor_dir);
       break;
     case CONFIG_INERTIA:
-      *raw_value = ToRaw(config_.inertia);
+      *raw_value =
+          ToRaw(bldc_servo_ != nullptr ?
+                bldc_servo_->config().inertia_feedforward : config_.inertia);
       break;
     case CONFIG_TORQUE_CONSTANT:
       *raw_value = ToRaw(config_.torque_constant);
