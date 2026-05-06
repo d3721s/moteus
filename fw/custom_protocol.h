@@ -51,9 +51,12 @@ public:
                 fuda_config_->control_mode >= 0 &&
                 fuda_config_->control_mode <= 3 ?
             fuda_config_->control_mode : 0;
-    config_.sync_target_enable = 0;
-    config_.position_filter_bw = 0.0f;
-    config_.protect_under_voltage = 0.0f;
+    config_.sync_target_enable =
+        fuda_config_ != nullptr ? fuda_config_->sync_target_enable : 0;
+    config_.position_filter_bw =
+        fuda_config_ != nullptr ? fuda_config_->position_filter_bw : 0.0f;
+    config_.protect_under_voltage =
+        fuda_config_ != nullptr ? fuda_config_->protect_under_voltage : 0.0f;
     config_.node_id = multiplex_protocol_->config()->id;
     config_.can_baudrate =
         fuda_config_ != nullptr && fuda_config_->can_baudrate > 0
@@ -110,6 +113,11 @@ public:
     config_.node_id = multiplex_protocol_->config()->id;
     config_.calib_valid =
         motor.poles != 0 && (motor.poles % 2) == 0 ? 1 : 0;
+    if (fuda_config_ != nullptr) {
+      config_.sync_target_enable = fuda_config_->sync_target_enable;
+      config_.position_filter_bw = fuda_config_->position_filter_bw;
+      config_.protect_under_voltage = fuda_config_->protect_under_voltage;
+    }
 
     if (position_config != nullptr) {
       config_.encoder_dir = position_config->output.sign < 0 ? 1 : 0;
@@ -578,6 +586,22 @@ private:
     if (index == CONFIG_CALIB_VOLTAGE) {
       if (fuda_config_ != nullptr) {
         fuda_config_->calib_voltage = config_.calib_voltage;
+      }
+    }
+    if (index == CONFIG_SYNC_TARGET_ENABLE) {
+      if (fuda_config_ != nullptr) {
+        fuda_config_->sync_target_enable = config_.sync_target_enable;
+      }
+    }
+    if (index == CONFIG_POSITION_FILTER_BW) {
+      if (fuda_config_ != nullptr) {
+        fuda_config_->position_filter_bw = config_.position_filter_bw;
+      }
+    }
+    if (index == CONFIG_PROTECT_UNDER_VOLTAGE) {
+      if (fuda_config_ != nullptr) {
+        fuda_config_->protect_under_voltage =
+            config_.protect_under_voltage;
       }
     }
     if (index == CONFIG_HEARTBEAT_PRODUCER_MS &&
