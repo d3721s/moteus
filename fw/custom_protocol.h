@@ -54,7 +54,10 @@ public:
             ? fuda_config_->can_baudrate
             : (fdcan_ != nullptr ? fdcan_->fast_bitrate() : 0);
     config_.heartbeat_consumer_ms = 0;
-    config_.heartbeat_producer_ms = 0;
+    config_.heartbeat_producer_ms =
+        fuda_config_ != nullptr && fuda_config_->heartbeat_producer_ms > 0
+            ? fuda_config_->heartbeat_producer_ms
+            : 0;
     config_.calib_valid = 0;
     config_.offset_lut = 0;
 
@@ -552,6 +555,13 @@ private:
         fuda_config_->can_baudrate = config_.can_baudrate;
       }
     }
+    if (index == CONFIG_HEARTBEAT_PRODUCER_MS &&
+        config_.heartbeat_producer_ms >= 0) {
+      if (fuda_config_ != nullptr) {
+        fuda_config_->heartbeat_producer_ms =
+            config_.heartbeat_producer_ms;
+      }
+    }
   }
 
   bool SetConfigRaw(uint32_t index, uint32_t raw_value) {
@@ -661,9 +671,13 @@ private:
     case CONFIG_HEARTBEAT_CONSUMER_MS:
       config_.heartbeat_consumer_ms = ToInt32(raw_value);
       break;
-    case CONFIG_HEARTBEAT_PRODUCER_MS:
+    case CONFIG_HEARTBEAT_PRODUCER_MS: {
       config_.heartbeat_producer_ms = ToInt32(raw_value);
+      if (config_.heartbeat_producer_ms < 0) {
+        return false;
+      }
       break;
+    }
     case CONFIG_CALIB_VALID:
       config_.calib_valid = ToInt32(raw_value);
       break;
