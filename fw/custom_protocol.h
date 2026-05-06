@@ -42,9 +42,15 @@ public:
       return;
     }
 
-    config_.calib_current = 0.0f;
-    config_.calib_voltage = 0.0f;
-    config_.control_mode = 0;
+    config_.calib_current =
+        fuda_config_ != nullptr ? fuda_config_->calib_current : 0.0f;
+    config_.calib_voltage =
+        fuda_config_ != nullptr ? fuda_config_->calib_voltage : 0.0f;
+    config_.control_mode =
+        fuda_config_ != nullptr &&
+                fuda_config_->control_mode >= 0 &&
+                fuda_config_->control_mode <= 3 ?
+            fuda_config_->control_mode : 0;
     config_.sync_target_enable = 0;
     config_.position_filter_bw = 0.0f;
     config_.protect_under_voltage = 0.0f;
@@ -58,7 +64,8 @@ public:
         fuda_config_ != nullptr && fuda_config_->heartbeat_producer_ms > 0
             ? fuda_config_->heartbeat_producer_ms
             : 0;
-    config_.calib_valid = 0;
+    config_.calib_valid =
+        fuda_config_ != nullptr ? fuda_config_->calib_valid : 0;
     config_.offset_lut = 0;
 
     SyncConfigFromServo();
@@ -556,6 +563,27 @@ private:
         fuda_config_->can_baudrate = config_.can_baudrate;
       }
     }
+    if (index == CONFIG_CONTROL_MODE &&
+        config_.control_mode >= 0 && config_.control_mode <= 3) {
+      if (fuda_config_ != nullptr) {
+        fuda_config_->control_mode = config_.control_mode;
+      }
+    }
+    if (index == CONFIG_CALIB_CURRENT) {
+      if (fuda_config_ != nullptr) {
+        fuda_config_->calib_current = config_.calib_current;
+      }
+    }
+    if (index == CONFIG_CALIB_VOLTAGE) {
+      if (fuda_config_ != nullptr) {
+        fuda_config_->calib_voltage = config_.calib_voltage;
+      }
+    }
+    if (index == CONFIG_CALIB_VALID) {
+      if (fuda_config_ != nullptr) {
+        fuda_config_->calib_valid = config_.calib_valid;
+      }
+    }
     if (index == CONFIG_HEARTBEAT_PRODUCER_MS &&
         config_.heartbeat_producer_ms >= 0) {
       if (fuda_config_ != nullptr) {
@@ -602,9 +630,13 @@ private:
     case CONFIG_CALIB_VOLTAGE:
       config_.calib_voltage = ToFloat(raw_value);
       break;
-    case CONFIG_CONTROL_MODE:
+    case CONFIG_CONTROL_MODE: {
       config_.control_mode = ToInt32(raw_value);
+      if (config_.control_mode < 0 || config_.control_mode > 3) {
+        return false;
+      }
       break;
+    }
     case CONFIG_POS_GAIN:
       config_.pos_gain = ToFloat(raw_value);
       break;
