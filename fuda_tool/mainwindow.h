@@ -14,6 +14,7 @@ class QPushButton;
 class QSpinBox;
 class QTableWidget;
 class QTableWidgetItem;
+class QThread;
 class QWidget;
 
 class MainWindow : public QMainWindow
@@ -24,10 +25,18 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 
+signals:
+    void connectCanInterfaceRequested(const QString &interfaceName, int bitrate, int dataBitrate);
+    void disconnectCanInterfaceRequested();
+    void sendCanCommandRequested(quint8 nodeId, quint8 commandId, const QByteArray &payload);
+
 private:
     QWidget *createConnectionPanel();
     QWidget *createCommandPanel();
     QWidget *createConfigPanel();
+    QWidget *createCalibrationPanel();
+    QWidget *createAnticoggingPanel();
+    QWidget *createDfuPanel();
     QWidget *createStatusPanel();
     QWidget *createLogPanel();
 
@@ -35,6 +44,7 @@ private:
     void applyVisualStyle();
 
     void sendProtocolCommand(quint8 commandId);
+    void sendRawProtocolCommand(quint8 commandId, const QByteArray &payload);
     void sendConfigRead(quint32 index);
     void sendConfigWrite(quint32 index);
     bool buildCommandPayload(const CommandDef &command, QByteArray *payload, QString *error) const;
@@ -54,7 +64,9 @@ private:
     quint8 currentNodeId() const;
     QString commandInputText(quint8 commandId) const;
 
+    QThread *m_canThread = nullptr;
     CanService *m_canService = nullptr;
+    QWidget *m_canContentArea = nullptr;
 
     QLineEdit *m_interfaceEdit = nullptr;
     QSpinBox *m_nodeSpin = nullptr;

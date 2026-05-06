@@ -25,7 +25,7 @@ QString CanService::interfaceName() const
     return m_interfaceName;
 }
 
-bool CanService::connectInterface(const QString &interfaceName, int bitrate, int dataBitrate)
+void CanService::connectInterface(const QString &interfaceName, int bitrate, int dataBitrate)
 {
     clearDevice();
 
@@ -34,7 +34,7 @@ bool CanService::connectInterface(const QString &interfaceName, int bitrate, int
     if (!m_device) {
         emit connectionChanged(false, error);
         emit errorOccurred(error);
-        return false;
+        return;
     }
 
     m_interfaceName = interfaceName;
@@ -66,11 +66,10 @@ bool CanService::connectInterface(const QString &interfaceName, int bitrate, int
         emit connectionChanged(false, message);
         emit errorOccurred(message);
         clearDevice();
-        return false;
+        return;
     }
 
     emit connectionChanged(true, QStringLiteral("已连接 %1").arg(interfaceName));
-    return true;
 }
 
 void CanService::disconnectInterface()
@@ -79,23 +78,16 @@ void CanService::disconnectInterface()
     emit connectionChanged(false, QStringLiteral("未连接"));
 }
 
-bool CanService::sendCommand(quint8 nodeId,
-                             quint8 commandId,
-                             const QByteArray &payload,
-                             QString *errorMessage)
+void CanService::sendCommand(quint8 nodeId, quint8 commandId, const QByteArray &payload)
 {
     if (!isConnected()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("CAN 未连接");
-        }
-        return false;
+        emit errorOccurred(QStringLiteral("CAN 未连接"));
+        return;
     }
 
     if (payload.size() > 64) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("payload 长度 %1 超过 CAN FD 64 字节限制").arg(payload.size());
-        }
-        return false;
+        emit errorOccurred(QStringLiteral("payload 长度 %1 超过 CAN FD 64 字节限制").arg(payload.size()));
+        return;
     }
 
     QCanBusFrame frame(CanIdCodec::makeRequestId(nodeId, commandId), payload);
@@ -105,14 +97,11 @@ bool CanService::sendCommand(quint8 nodeId,
     frame.setBitrateSwitch(m_bitrateSwitchEnabled);
 
     if (!m_device->writeFrame(frame)) {
-        if (errorMessage) {
-            *errorMessage = m_device->errorString();
-        }
-        return false;
+        emit errorOccurred(m_device->errorString());
+        return;
     }
 
     emit frameTransmitted(frame);
-    return true;
 }
 
 void CanService::clearDevice()
@@ -124,7 +113,7 @@ void CanService::clearDevice()
     if (m_device->state() != QCanBusDevice::UnconnectedState) {
         m_device->disconnectDevice();
     }
-    m_device->deleteLater();
+    delete m_device;
     m_device = nullptr;
     m_bitrateSwitchEnabled = false;
 }

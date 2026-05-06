@@ -13,15 +13,14 @@ public:
     explicit CanService(QObject *parent = nullptr);
     ~CanService() override;
 
+public slots:
+    void connectInterface(const QString &interfaceName, int bitrate, int dataBitrate);
+    void disconnectInterface();
+    void sendCommand(quint8 nodeId, quint8 commandId, const QByteArray &payload);
+
+private:
     bool isConnected() const;
     QString interfaceName() const;
-
-    bool connectInterface(const QString &interfaceName, int bitrate, int dataBitrate);
-    void disconnectInterface();
-    bool sendCommand(quint8 nodeId,
-                     quint8 commandId,
-                     const QByteArray &payload,
-                     QString *errorMessage = nullptr);
 
 signals:
     void connectionChanged(bool connected, const QString &message);

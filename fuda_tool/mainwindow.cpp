@@ -16,6 +16,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMetaObject>
+#include <QMetaType>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QScrollBar>
@@ -25,6 +27,8 @@
 #include <QStyle>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTabWidget>
+#include <QThread>
 #include <QVBoxLayout>
 
 #include <limits>
@@ -93,35 +97,79 @@ QLabel *valueLabel(const QString &text = QStringLiteral("-"))
     label->setTextInteractionFlags(Qt::TextSelectableByMouse);
     return label;
 }
+
+struct TitledPanel
+{
+    QWidget *panel = nullptr;
+    QWidget *body = nullptr;
+};
+
+TitledPanel createTitledPanel(const QString &title, QWidget *parent)
+{
+    auto *panel = new QWidget(parent);
+    auto *panelLayout = new QVBoxLayout(panel);
+    panelLayout->setContentsMargins(0, 0, 0, 0);
+    panelLayout->setSpacing(0);
+
+    auto *titleLabel = new QLabel(title, panel);
+    titleLabel->setObjectName(QStringLiteral("panelTitle"));
+
+    auto *body = new QWidget(panel);
+    body->setObjectName(QStringLiteral("panelBody"));
+
+    panelLayout->addWidget(titleLabel);
+    panelLayout->addWidget(body, 1);
+    return {panel, body};
+}
 }
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
-    , m_canService(new CanService(this))
+    , m_canThread(new QThread(this))
+    , m_canService(new CanService)
 {
+    qRegisterMetaType<QCanBusFrame>("QCanBusFrame");
+    qRegisterMetaType<quint8>("quint8");
+
+    m_canThread->setObjectName(QStringLiteral("CanServiceThread"));
+    m_canService->moveToThread(m_canThread);
+    connect(m_canThread, &QThread::finished, m_canService, &QObject::deleteLater);
+    m_canThread->start();
+
     setWindowTitle(QStringLiteral("fuda_tool - SocketCAN 测试工具"));
-    resize(1500, 920);
+    resize(1320, 840);
 
     auto *central = new QWidget(this);
     auto *root = new QVBoxLayout(central);
-    root->setContentsMargins(12, 12, 12, 12);
-    root->setSpacing(10);
+    root->setContentsMargins(8, 8, 8, 8);
+    root->setSpacing(6);
 
     root->addWidget(createConnectionPanel());
 
     auto *verticalSplitter = new QSplitter(Qt::Vertical, central);
-    auto *upperSplitter = new QSplitter(Qt::Horizontal, verticalSplitter);
-    upperSplitter->addWidget(createCommandPanel());
-    upperSplitter->addWidget(createStatusPanel());
-    upperSplitter->setStretchFactor(0, 4);
-    upperSplitter->setStretchFactor(1, 1);
+    m_canContentArea = verticalSplitter;
+    auto *workSplitter = new QSplitter(Qt::Horizontal, verticalSplitter);
+    auto *tabs = new QTabWidget(workSplitter);
+    tabs->addTab(createCommandPanel(), QStringLiteral("命令测试"));
+    tabs->addTab(createConfigPanel(), QStringLiteral("参数读写"));
+    tabs->addTab(createCalibrationPanel(), QStringLiteral("电机校准"));
+    tabs->addTab(createAnticoggingPanel(), QStringLiteral("齿槽补偿"));
+    tabs->addTab(createDfuPanel(), QStringLiteral("远程升级"));
 
-    verticalSplitter->addWidget(upperSplitter);
-    verticalSplitter->addWidget(createConfigPanel());
+    workSplitter->addWidget(tabs);
+    QWidget *statusPanel = createStatusPanel();
+    statusPanel->setMaximumWidth(220);
+    statusPanel->setMinimumWidth(190);
+    workSplitter->addWidget(statusPanel);
+    workSplitter->setStretchFactor(0, 8);
+    workSplitter->setStretchFactor(1, 1);
+    workSplitter->setSizes({1090, 210});
+
+    verticalSplitter->addWidget(workSplitter);
     verticalSplitter->addWidget(createLogPanel());
-    verticalSplitter->setStretchFactor(0, 5);
+    verticalSplitter->setStretchFactor(0, 2);
     verticalSplitter->setStretchFactor(1, 3);
-    verticalSplitter->setStretchFactor(2, 2);
+    verticalSplitter->setSizes({310, 500});
 
     root->addWidget(verticalSplitter, 1);
     setCentralWidget(central);
@@ -131,15 +179,26 @@ MainWindow::MainWindow(QWidget *parent)
     setConnectionState(false, QStringLiteral("未连接"));
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow()
+{
+    if (!m_canThread || !m_canThread->isRunning()) {
+        return;
+    }
+
+    QMetaObject::invokeMethod(m_canService, "disconnectInterface", Qt::BlockingQueuedConnection);
+    m_canThread->quit();
+    m_canThread->wait();
+}
 
 QWidget *MainWindow::createConnectionPanel()
 {
-    auto *box = new QGroupBox(QStringLiteral("CAN 连接"), this);
+    auto *box = new QWidget(this);
+    box->setObjectName(QStringLiteral("connectionBar"));
+    box->setFixedHeight(58);
     auto *layout = new QGridLayout(box);
-    layout->setContentsMargins(12, 18, 12, 12);
-    layout->setHorizontalSpacing(10);
-    layout->setVerticalSpacing(8);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setHorizontalSpacing(8);
+    layout->setVerticalSpacing(0);
 
     m_interfaceEdit = new QLineEdit(QStringLiteral("can0"), box);
     m_interfaceEdit->setMinimumWidth(110);
@@ -166,41 +225,43 @@ QWidget *MainWindow::createConnectionPanel()
     m_connectionStateLabel = new QLabel(box);
     m_connectionStateLabel->setObjectName(QStringLiteral("connectionState"));
 
-    layout->addWidget(new QLabel(QStringLiteral("接口"), box), 0, 0);
-    layout->addWidget(m_interfaceEdit, 0, 1);
-    layout->addWidget(new QLabel(QStringLiteral("节点 ID"), box), 0, 2);
-    layout->addWidget(m_nodeSpin, 0, 3);
-    layout->addWidget(new QLabel(QStringLiteral("仲裁波特率"), box), 0, 4);
-    layout->addWidget(m_bitrateSpin, 0, 5);
-    layout->addWidget(new QLabel(QStringLiteral("帧格式"), box), 0, 6);
-    layout->addWidget(new QLabel(QStringLiteral("CAN FD"), box), 0, 7);
-    layout->addWidget(new QLabel(QStringLiteral("数据波特率"), box), 0, 8);
-    layout->addWidget(m_dataBitrateSpin, 0, 9);
-    layout->addWidget(connectButton, 0, 10);
-    layout->addWidget(disconnectButton, 0, 11);
-    layout->addWidget(m_connectionStateLabel, 0, 12);
-    layout->setColumnStretch(12, 1);
+    auto *titleLabel = new QLabel(QStringLiteral("CAN 连接"), box);
+    titleLabel->setObjectName(QStringLiteral("barTitle"));
+
+    layout->addWidget(titleLabel, 0, 0);
+    layout->addWidget(new QLabel(QStringLiteral("设备"), box), 0, 1);
+    layout->addWidget(m_interfaceEdit, 0, 2);
+    layout->addWidget(new QLabel(QStringLiteral("节点 ID"), box), 0, 3);
+    layout->addWidget(m_nodeSpin, 0, 4);
+    layout->addWidget(new QLabel(QStringLiteral("仲裁波特率"), box), 0, 5);
+    layout->addWidget(m_bitrateSpin, 0, 6);
+    layout->addWidget(new QLabel(QStringLiteral("数据波特率"), box), 0, 7);
+    layout->addWidget(m_dataBitrateSpin, 0, 8);
+    layout->addWidget(connectButton, 0, 9);
+    layout->addWidget(disconnectButton, 0, 10);
+    layout->addWidget(m_connectionStateLabel, 0, 11);
+    layout->setColumnStretch(11, 1);
 
     connect(connectButton, &QPushButton::clicked, this, [this]() {
         const QString interfaceName = m_interfaceEdit->text().trimmed();
         if (interfaceName.isEmpty()) {
-            QMessageBox::warning(this, QStringLiteral("参数错误"), QStringLiteral("CAN 接口名不能为空"));
+            QMessageBox::warning(this, QStringLiteral("参数错误"), QStringLiteral("设备名不能为空"));
             return;
         }
-        m_canService->connectInterface(interfaceName,
-                                       m_bitrateSpin->value(),
-                                       m_dataBitrateSpin->value());
+        emit connectCanInterfaceRequested(interfaceName,
+                                          m_bitrateSpin->value(),
+                                          m_dataBitrateSpin->value());
     });
-    connect(disconnectButton, &QPushButton::clicked, m_canService, &CanService::disconnectInterface);
+    connect(disconnectButton, &QPushButton::clicked, this, &MainWindow::disconnectCanInterfaceRequested);
 
     return box;
 }
 
 QWidget *MainWindow::createCommandPanel()
 {
-    auto *box = new QGroupBox(QStringLiteral("命令测试"), this);
+    auto *box = new QWidget(this);
     auto *layout = new QVBoxLayout(box);
-    layout->setContentsMargins(10, 18, 10, 10);
+    layout->setContentsMargins(6, 6, 6, 6);
 
     m_commandTable = new QTableWidget(box);
     m_commandTable->setColumnCount(6);
@@ -215,13 +276,14 @@ QWidget *MainWindow::createCommandPanel()
     m_commandTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_commandTable->setAlternatingRowColors(true);
     m_commandTable->setWordWrap(false);
+    m_commandTable->horizontalHeader()->setStretchLastSection(false);
 
     const auto &commands = Protocol::commandDefinitions();
     m_commandTable->setRowCount(commands.size());
     for (int row = 0; row < commands.size(); ++row) {
         const CommandDef &command = commands.at(row);
         m_commandTable->setItem(row, 0, readOnlyItem(QString::number(command.id)));
-        m_commandTable->setItem(row, 1, readOnlyItem(QStringLiteral("%1\n%2").arg(command.enumName, command.displayName)));
+        m_commandTable->setItem(row, 1, readOnlyItem(QStringLiteral("%1  %2").arg(command.enumName, command.displayName)));
         m_commandTable->setItem(row, 2, readOnlyItem(command.dlcText));
         m_commandTable->setItem(row, 4, readOnlyItem(command.description));
 
@@ -278,10 +340,11 @@ QWidget *MainWindow::createCommandPanel()
     m_commandTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     m_commandTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     m_commandTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    m_commandTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    m_commandTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
     m_commandTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
     m_commandTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
-    m_commandTable->verticalHeader()->setDefaultSectionSize(42);
+    m_commandTable->setColumnWidth(3, 210);
+    m_commandTable->verticalHeader()->setDefaultSectionSize(32);
 
     layout->addWidget(m_commandTable);
     return box;
@@ -289,9 +352,9 @@ QWidget *MainWindow::createCommandPanel()
 
 QWidget *MainWindow::createConfigPanel()
 {
-    auto *box = new QGroupBox(QStringLiteral("参数读写"), this);
+    auto *box = new QWidget(this);
     auto *layout = new QVBoxLayout(box);
-    layout->setContentsMargins(10, 18, 10, 10);
+    layout->setContentsMargins(6, 6, 6, 6);
 
     m_configTable = new QTableWidget(box);
     m_configTable->setColumnCount(8);
@@ -308,6 +371,7 @@ QWidget *MainWindow::createConfigPanel()
     m_configTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_configTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_configTable->setWordWrap(false);
+    m_configTable->horizontalHeader()->setStretchLastSection(false);
 
     const auto &configs = Protocol::configDefinitions();
     m_configTable->setRowCount(configs.size());
@@ -353,22 +417,166 @@ QWidget *MainWindow::createConfigPanel()
     m_configTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     m_configTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     m_configTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    m_configTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
+    m_configTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Interactive);
     m_configTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
     m_configTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
     m_configTable->horizontalHeader()->setSectionResizeMode(7, QHeaderView::ResizeToContents);
-    m_configTable->verticalHeader()->setDefaultSectionSize(34);
+    m_configTable->setColumnWidth(4, 150);
+    m_configTable->verticalHeader()->setDefaultSectionSize(28);
 
     layout->addWidget(m_configTable);
     return box;
 }
 
+QWidget *MainWindow::createCalibrationPanel()
+{
+    auto *box = new QWidget(this);
+    auto *layout = new QGridLayout(box);
+    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setHorizontalSpacing(8);
+    layout->setVerticalSpacing(8);
+
+    auto *startButton = new QPushButton(style()->standardIcon(QStyle::SP_MediaPlay), QStringLiteral("启动校准"), box);
+    auto *abortButton = new QPushButton(style()->standardIcon(QStyle::SP_MediaStop), QStringLiteral("中止校准"), box);
+    auto *statusButton = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("读取状态"), box);
+    auto *calibValidButton = new QPushButton(QStringLiteral("读取校准标志"), box);
+    auto *encoderDirButton = new QPushButton(QStringLiteral("读取编码器方向"), box);
+    auto *encoderOffsetButton = new QPushButton(QStringLiteral("读取编码器偏移"), box);
+    auto *setHomeButton = new QPushButton(QStringLiteral("设置当前位置为零点"), box);
+    auto *saveButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("保存配置"), box);
+
+    connect(startButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(5); });
+    connect(abortButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(7); });
+    connect(statusButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(13); });
+    connect(calibValidButton, &QPushButton::clicked, this, [this]() { sendConfigRead(34); });
+    connect(encoderDirButton, &QPushButton::clicked, this, [this]() { sendConfigRead(35); });
+    connect(encoderOffsetButton, &QPushButton::clicked, this, [this]() { sendConfigRead(36); });
+    connect(setHomeButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(11); });
+    connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19); });
+
+    layout->addWidget(startButton, 0, 0);
+    layout->addWidget(abortButton, 0, 1);
+    layout->addWidget(statusButton, 0, 2);
+    layout->addWidget(calibValidButton, 1, 0);
+    layout->addWidget(encoderDirButton, 1, 1);
+    layout->addWidget(encoderOffsetButton, 1, 2);
+    layout->addWidget(setHomeButton, 2, 0);
+    layout->addWidget(saveButton, 2, 1);
+    layout->setColumnStretch(3, 1);
+    layout->setRowStretch(3, 1);
+    return box;
+}
+
+QWidget *MainWindow::createAnticoggingPanel()
+{
+    auto *box = new QWidget(this);
+    auto *layout = new QGridLayout(box);
+    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setHorizontalSpacing(8);
+    layout->setVerticalSpacing(8);
+
+    auto *startButton = new QPushButton(style()->standardIcon(QStyle::SP_MediaPlay), QStringLiteral("启动补偿"), box);
+    auto *abortButton = new QPushButton(style()->standardIcon(QStyle::SP_MediaStop), QStringLiteral("中止补偿"), box);
+    auto *statusButton = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("读取状态"), box);
+    auto *enableButton = new QPushButton(QStringLiteral("启用补偿"), box);
+    auto *disableButton = new QPushButton(QStringLiteral("关闭补偿"), box);
+    auto *readEnableButton = new QPushButton(QStringLiteral("读取启用状态"), box);
+    auto *readLutButton = new QPushButton(QStringLiteral("读取补偿表"), box);
+    auto *saveButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("保存配置"), box);
+
+    connect(startButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(8); });
+    connect(abortButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(10); });
+    connect(statusButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(13); });
+    connect(enableButton, &QPushButton::clicked, this, [this]() {
+        sendRawProtocolCommand(17, PayloadCodec::encodeUInt32(16) + PayloadCodec::encodeInt32(1));
+    });
+    connect(disableButton, &QPushButton::clicked, this, [this]() {
+        sendRawProtocolCommand(17, PayloadCodec::encodeUInt32(16) + PayloadCodec::encodeInt32(0));
+    });
+    connect(readEnableButton, &QPushButton::clicked, this, [this]() { sendConfigRead(16); });
+    connect(readLutButton, &QPushButton::clicked, this, [this]() { sendConfigRead(37); });
+    connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19); });
+
+    layout->addWidget(startButton, 0, 0);
+    layout->addWidget(abortButton, 0, 1);
+    layout->addWidget(statusButton, 0, 2);
+    layout->addWidget(enableButton, 1, 0);
+    layout->addWidget(disableButton, 1, 1);
+    layout->addWidget(readEnableButton, 1, 2);
+    layout->addWidget(readLutButton, 2, 0);
+    layout->addWidget(saveButton, 2, 1);
+    layout->setColumnStretch(3, 1);
+    layout->setRowStretch(3, 1);
+    return box;
+}
+
+QWidget *MainWindow::createDfuPanel()
+{
+    auto *box = new QWidget(this);
+    auto *layout = new QGridLayout(box);
+    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setHorizontalSpacing(8);
+    layout->setVerticalSpacing(8);
+
+    auto *startButton = new QPushButton(style()->standardIcon(QStyle::SP_MediaPlay), QStringLiteral("开始升级"), box);
+    auto *versionButton = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("读取版本"), box);
+    auto *dataEdit = new QLineEdit(box);
+    auto *endEdit = new QLineEdit(QStringLiteral("00 00 00 00 00 00 00 00"), box);
+    auto *sendDataButton = new QPushButton(QStringLiteral("发送数据包"), box);
+    auto *endButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("结束升级"), box);
+
+    dataEdit->setPlaceholderText(QStringLiteral("1~8 字节，例如: 01 02 03 04"));
+    endEdit->setPlaceholderText(QStringLiteral("8 字节校验数据"));
+
+    connect(startButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(29); });
+    connect(versionButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(28); });
+    connect(sendDataButton, &QPushButton::clicked, this, [this, dataEdit]() {
+        QByteArray payload;
+        QString error;
+        if (!PayloadCodec::parseHexBytes(dataEdit->text(), &payload, &error)) {
+            QMessageBox::warning(this, QStringLiteral("参数错误"), error);
+            return;
+        }
+        if (payload.isEmpty() || payload.size() > 8) {
+            QMessageBox::warning(this, QStringLiteral("参数错误"), QStringLiteral("DFU_DATA 需要 1~8 个字节"));
+            return;
+        }
+        sendRawProtocolCommand(30, payload);
+    });
+    connect(endButton, &QPushButton::clicked, this, [this, endEdit]() {
+        QByteArray payload;
+        QString error;
+        if (!PayloadCodec::parseHexBytes(endEdit->text(), &payload, &error)) {
+            QMessageBox::warning(this, QStringLiteral("参数错误"), error);
+            return;
+        }
+        if (payload.size() != 8) {
+            QMessageBox::warning(this, QStringLiteral("参数错误"), QStringLiteral("DFU_END 需要 8 个字节"));
+            return;
+        }
+        sendRawProtocolCommand(31, payload);
+    });
+
+    layout->addWidget(startButton, 0, 0);
+    layout->addWidget(versionButton, 0, 1);
+    layout->addWidget(new QLabel(QStringLiteral("DFU_DATA"), box), 1, 0);
+    layout->addWidget(dataEdit, 1, 1, 1, 2);
+    layout->addWidget(sendDataButton, 1, 3);
+    layout->addWidget(new QLabel(QStringLiteral("DFU_END"), box), 2, 0);
+    layout->addWidget(endEdit, 2, 1, 1, 2);
+    layout->addWidget(endButton, 2, 3);
+    layout->setColumnStretch(2, 1);
+    layout->setRowStretch(3, 1);
+    return box;
+}
+
 QWidget *MainWindow::createStatusPanel()
 {
-    auto *box = new QGroupBox(QStringLiteral("实时状态"), this);
+    const TitledPanel panel = createTitledPanel(QStringLiteral("实时状态"), this);
+    auto *box = panel.body;
     auto *layout = new QFormLayout(box);
-    layout->setContentsMargins(12, 18, 12, 12);
-    layout->setSpacing(8);
+    layout->setContentsMargins(10, 8, 10, 10);
+    layout->setSpacing(6);
     layout->setLabelAlignment(Qt::AlignRight);
 
     m_lastNodeLabel = valueLabel();
@@ -408,14 +616,15 @@ QWidget *MainWindow::createStatusPanel()
     layout->addRow(QStringLiteral("VALUE_1"), m_value1Label);
 
     updateStatusWords(0, 0);
-    return box;
+    return panel.panel;
 }
 
 QWidget *MainWindow::createLogPanel()
 {
-    auto *box = new QGroupBox(QStringLiteral("CAN 日志"), this);
+    const TitledPanel panel = createTitledPanel(QStringLiteral("CAN 日志"), this);
+    auto *box = panel.body;
     auto *layout = new QVBoxLayout(box);
-    layout->setContentsMargins(10, 18, 10, 10);
+    layout->setContentsMargins(8, 8, 8, 8);
 
     auto *clearButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogResetButton), QStringLiteral("清空日志"), box);
     connect(clearButton, &QPushButton::clicked, this, [this]() {
@@ -438,6 +647,7 @@ QWidget *MainWindow::createLogPanel()
     m_logTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_logTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_logTable->setWordWrap(false);
+    m_logTable->horizontalHeader()->setStretchLastSection(false);
     m_logTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     m_logTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     m_logTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
@@ -446,95 +656,171 @@ QWidget *MainWindow::createLogPanel()
     m_logTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
     m_logTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Stretch);
     m_logTable->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Stretch);
-    m_logTable->verticalHeader()->setDefaultSectionSize(30);
+    m_logTable->verticalHeader()->setDefaultSectionSize(25);
 
     layout->addWidget(m_logTable);
-    return box;
+    return panel.panel;
 }
 
 void MainWindow::setupCanConnections()
 {
-    connect(m_canService, &CanService::connectionChanged, this, &MainWindow::setConnectionState);
-    connect(m_canService, &CanService::frameReceived, this, &MainWindow::handleReceivedFrame);
-    connect(m_canService, &CanService::frameTransmitted, this, &MainWindow::handleTransmittedFrame);
+    connect(this, &MainWindow::connectCanInterfaceRequested, m_canService, &CanService::connectInterface, Qt::QueuedConnection);
+    connect(this, &MainWindow::disconnectCanInterfaceRequested, m_canService, &CanService::disconnectInterface, Qt::QueuedConnection);
+    connect(this, &MainWindow::sendCanCommandRequested, m_canService, &CanService::sendCommand, Qt::QueuedConnection);
+
+    connect(m_canService, &CanService::connectionChanged, this, &MainWindow::setConnectionState, Qt::QueuedConnection);
+    connect(m_canService, &CanService::frameReceived, this, &MainWindow::handleReceivedFrame, Qt::QueuedConnection);
+    connect(m_canService, &CanService::frameTransmitted, this, &MainWindow::handleTransmittedFrame, Qt::QueuedConnection);
     connect(m_canService, &CanService::errorOccurred, this, [this](const QString &message) {
         statusBar()->showMessage(message, 5000);
-        appendSystemLog(QStringLiteral("ERROR: %1").arg(message));
-    });
+    }, Qt::QueuedConnection);
 }
 
 void MainWindow::applyVisualStyle()
 {
     qApp->setStyleSheet(QStringLiteral(R"(
         QMainWindow, QWidget {
-            background: #F5F7FA;
-            color: #1F2937;
-            font-size: 13px;
+            background: #ECECEC;
+            color: #202020;
+            font-size: 14px;
         }
         QGroupBox {
-            background: #FFFFFF;
-            border: 1px solid #D6DCE5;
-            border-radius: 6px;
-            margin-top: 8px;
+            background: #F3F3F3;
+            border: 1px solid #9A9A9A;
+            border-radius: 2px;
+            margin-top: 7px;
             font-weight: 600;
         }
         QGroupBox::title {
             subcontrol-origin: margin;
             left: 10px;
-            padding: 0 5px;
+            padding: 0 4px;
+            background: transparent;
+            color: #202020;
         }
-        QLineEdit, QSpinBox {
-            min-height: 26px;
-            border: 1px solid #C9D1DD;
-            border-radius: 4px;
-            padding: 2px 6px;
-            background: #FFFFFF;
-            selection-background-color: #2563EB;
+        QLabel {
+            background: transparent;
         }
-        QLineEdit:disabled {
-            color: #6B7280;
-            background: #F1F3F6;
+        QLabel#panelTitle {
+            background: #DCDCDC;
+            border: 1px solid #9A9A9A;
+            border-bottom: 0;
+            padding: 4px 8px;
+            color: #202020;
+            font-weight: 700;
         }
-        QPushButton {
-            min-height: 26px;
-            border: 1px solid #B9C2D0;
-            border-radius: 4px;
-            padding: 3px 10px;
-            background: #FFFFFF;
+        QWidget#panelBody {
+            background: #F3F3F3;
+            border: 1px solid #9A9A9A;
         }
-        QPushButton:hover {
-            background: #EEF4FF;
-            border-color: #7EA6F7;
+        QWidget#connectionBar {
+            background: #F3F3F3;
+            border: 1px solid #9A9A9A;
         }
-        QPushButton:pressed {
-            background: #DCEBFF;
+        QLabel#barTitle {
+            background: transparent;
+            color: #202020;
+            font-weight: 700;
+            padding: 0 6px;
         }
-        QPushButton:disabled {
-            color: #9CA3AF;
-            background: #F3F4F6;
+        QTabWidget::pane {
+            background: #F3F3F3;
+            border: 1px solid #9A9A9A;
+            border-radius: 0;
+            top: -1px;
         }
-        QHeaderView::section {
-            background: #E8EDF5;
-            border: 0;
-            border-right: 1px solid #D5DBE5;
-            border-bottom: 1px solid #D5DBE5;
-            padding: 6px;
+        QTabBar::tab {
+            min-width: 96px;
+            min-height: 28px;
+            padding: 3px 16px;
+            margin-right: 2px;
+            border: 1px solid #9A9A9A;
+            border-bottom: 0;
+            border-top-left-radius: 2px;
+            border-top-right-radius: 2px;
+            background: #DCDCDC;
+            color: #202020;
             font-weight: 600;
         }
-        QTableWidget {
-            gridline-color: #E2E7EF;
+        QTabBar::tab:selected {
+            background: #F3F3F3;
+            color: #000000;
+            border-top: 1px solid #FFFFFF;
+        }
+        QSplitter::handle {
+            background: #B8B8B8;
+        }
+        QSplitter::handle:horizontal {
+            width: 5px;
+        }
+        QSplitter::handle:vertical {
+            height: 5px;
+        }
+        QLineEdit, QSpinBox {
+            min-height: 24px;
+            border: 1px solid #8A8A8A;
+            border-radius: 0;
+            padding: 1px 6px;
             background: #FFFFFF;
-            alternate-background-color: #FAFBFD;
-            selection-background-color: #D8E8FF;
-            selection-color: #111827;
-            border: 1px solid #D6DCE5;
-            border-radius: 4px;
+            selection-background-color: #0A64AD;
+        }
+        QLineEdit:disabled {
+            color: #707070;
+            background: #E2E2E2;
+        }
+        QPushButton {
+            min-height: 24px;
+            border: 1px solid #7F7F7F;
+            border-radius: 0;
+            padding: 2px 9px;
+            background: #E6E6E6;
+            color: #202020;
+        }
+        QPushButton:hover {
+            background: #EFEFEF;
+            border-color: #4F4F4F;
+        }
+        QPushButton:pressed {
+            background: #D0D0D0;
+        }
+        QPushButton:disabled {
+            color: #8A8A8A;
+            background: #DADADA;
+        }
+        QHeaderView::section {
+            background: #D7D7D7;
+            border: 0;
+            border-right: 1px solid #A0A0A0;
+            border-bottom: 1px solid #A0A0A0;
+            padding: 4px 6px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #202020;
+        }
+        QTableWidget {
+            gridline-color: #C7C7C7;
+            background: #FFFFFF;
+            alternate-background-color: #F5F5F5;
+            selection-background-color: #0A64AD;
+            selection-color: #FFFFFF;
+            border: 1px solid #9A9A9A;
+            border-radius: 0;
+            outline: 0;
+        }
+        QTableWidget::item {
+            padding: 2px 5px;
         }
         QLabel#connectionState {
-            padding: 3px 10px;
-            border-radius: 4px;
-            background: #EEF2F7;
-            color: #374151;
+            padding: 2px 10px;
+            border: 1px solid #9A9A9A;
+            border-radius: 0;
+            background: #DCDCDC;
+            color: #202020;
+            font-weight: 600;
+        }
+        QStatusBar {
+            background: #DCDCDC;
+            color: #202020;
         }
     )"));
 }
@@ -571,18 +857,29 @@ void MainWindow::sendProtocolCommand(quint8 commandId)
         return;
     }
 
-    if (!m_canService->sendCommand(currentNodeId(), commandId, payload, &error)) {
-        QMessageBox::warning(this, QStringLiteral("发送失败"), error);
+    emit sendCanCommandRequested(currentNodeId(), commandId, payload);
+}
+
+void MainWindow::sendRawProtocolCommand(quint8 commandId, const QByteArray &payload)
+{
+    const CommandDef *command = Protocol::commandById(commandId);
+    if (!command || !command->txAllowed) {
+        return;
     }
+    if (payload.size() > 64) {
+        QMessageBox::warning(this,
+                             QStringLiteral("参数错误"),
+                             QStringLiteral("payload 长度 %1 超过 CAN FD 64 字节限制").arg(payload.size()));
+        return;
+    }
+
+    emit sendCanCommandRequested(currentNodeId(), commandId, payload);
 }
 
 void MainWindow::sendConfigRead(quint32 index)
 {
-    QString error;
     const QByteArray payload = PayloadCodec::encodeUInt32(index);
-    if (!m_canService->sendCommand(currentNodeId(), 18, payload, &error)) {
-        QMessageBox::warning(this, QStringLiteral("发送失败"), error);
-    }
+    emit sendCanCommandRequested(currentNodeId(), 18, payload);
 }
 
 void MainWindow::sendConfigWrite(quint32 index)
@@ -606,9 +903,7 @@ void MainWindow::sendConfigWrite(quint32 index)
 
     QByteArray payload = PayloadCodec::encodeUInt32(index);
     payload += valuePayload;
-    if (!m_canService->sendCommand(currentNodeId(), 17, payload, &error)) {
-        QMessageBox::warning(this, QStringLiteral("发送失败"), error);
-    }
+    emit sendCanCommandRequested(currentNodeId(), 17, payload);
 }
 
 bool MainWindow::buildCommandPayload(const CommandDef &command, QByteArray *payload, QString *error) const
@@ -1009,11 +1304,13 @@ void MainWindow::setFlagLabel(QLabel *label, bool active)
 
 void MainWindow::setConnectionState(bool connected, const QString &message)
 {
+    if (m_canContentArea) {
+        m_canContentArea->setEnabled(connected);
+    }
     m_connectionStateLabel->setText(message);
-    m_connectionStateLabel->setStyleSheet(connected ? QStringLiteral("background: #E7F6EC; color: #067647;")
-                                                    : QStringLiteral("background: #EEF2F7; color: #374151;"));
+    m_connectionStateLabel->setStyleSheet(connected ? QStringLiteral("background: #DDE8D6; color: #1F4D1F; border: 1px solid #7F9A7F; border-radius: 0;")
+                                                    : QStringLiteral("background: #DCDCDC; color: #202020; border: 1px solid #9A9A9A; border-radius: 0;"));
     statusBar()->showMessage(message, 3000);
-    appendSystemLog(message);
 }
 
 quint8 MainWindow::currentNodeId() const
