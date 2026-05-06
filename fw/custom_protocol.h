@@ -83,7 +83,6 @@ public:
     const auto &torque_model = bldc_servo_->torque_model();
     const auto *position_config = bldc_servo_->motor_position_config();
 
-    config_.invert_motor_dir = motor.phase_invert != 0 ? 1 : 0;
     config_.inertia = servo_config.inertia_feedforward;
     config_.torque_constant = torque_model.torque_constant_;
     config_.motor_pole_pairs = motor.poles / 2;
@@ -118,10 +117,14 @@ public:
     }
 
     if (position_config != nullptr) {
-      config_.encoder_dir = position_config->output.sign < 0 ? 1 : 0;
+      const int32_t output_sign_inverted =
+          position_config->output.sign < 0 ? 1 : 0;
+      config_.invert_motor_dir = output_sign_inverted;
+      config_.encoder_dir = output_sign_inverted;
       config_.encoder_offset =
           static_cast<int32_t>(position_config->output.offset);
     } else {
+      config_.invert_motor_dir = 0;
       config_.encoder_dir = 0;
       config_.encoder_offset = 0;
     }
@@ -449,7 +452,11 @@ private:
 
       switch (index) {
       case CONFIG_INVERT_MOTOR_DIR: {
-        motor.phase_invert = config_.invert_motor_dir;
+        if (position_config != nullptr) {
+          position_config->output.sign =
+              config_.invert_motor_dir != 0 ? -1 : 1;
+          config_.encoder_dir = config_.invert_motor_dir;
+        }
         break;
       }
       case CONFIG_INERTIA: {
@@ -553,6 +560,7 @@ private:
       case CONFIG_ENCODER_DIR: {
         if (position_config != nullptr) {
           position_config->output.sign = config_.encoder_dir != 0 ? -1 : 1;
+          config_.invert_motor_dir = config_.encoder_dir;
         }
         break;
       }
