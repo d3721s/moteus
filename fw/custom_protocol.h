@@ -101,6 +101,7 @@ public:
     config_.protect_over_voltage = servo_config.max_voltage;
     config_.protect_over_current = servo_config.max_current_A;
     config_.protect_i_bus_max = CleanFloat(servo_config.max_regen_power_W);
+    config_.node_id = multiplex_protocol_->config()->id;
 
     if (position_config != nullptr) {
       config_.encoder_dir = position_config->output.sign < 0 ? 1 : 0;
