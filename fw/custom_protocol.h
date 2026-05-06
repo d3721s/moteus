@@ -83,9 +83,7 @@ public:
     const auto &torque_model = bldc_servo_->torque_model();
     const auto *position_config = bldc_servo_->motor_position_config();
 
-    config_.invert_motor_dir =
-        position_config != nullptr ?
-        (position_config->output.sign < 0 ? 1 : 0) : 0;
+    config_.invert_motor_dir = motor.phase_invert != 0 ? 1 : 0;
     config_.inertia = servo_config.inertia_feedforward;
     config_.torque_constant = torque_model.torque_constant_;
     config_.motor_pole_pairs = motor.poles / 2;
@@ -451,10 +449,7 @@ private:
 
       switch (index) {
       case CONFIG_INVERT_MOTOR_DIR: {
-        if (position_config != nullptr) {
-          position_config->output.sign =
-              config_.invert_motor_dir != 0 ? -1 : 1;
-        }
+        motor.phase_invert = config_.invert_motor_dir;
         break;
       }
       case CONFIG_INERTIA: {
