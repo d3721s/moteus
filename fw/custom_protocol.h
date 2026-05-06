@@ -135,6 +135,19 @@ public:
       ms_since_last_send_++;
     }
 
+    if (bldc_servo_ != nullptr) {
+      const auto *position_config = bldc_servo_->motor_position_config();
+      if (position_config != nullptr) {
+        const int32_t output_sign_inverted =
+            position_config->output.sign < 0 ? 1 : 0;
+        config_.invert_motor_dir = output_sign_inverted;
+        config_.encoder_dir = output_sign_inverted;
+      } else {
+        config_.invert_motor_dir = 0;
+        config_.encoder_dir = 0;
+      }
+    }
+
     PollStatuswordReport();
 
     if (!auto_value_1_enabled_) {
