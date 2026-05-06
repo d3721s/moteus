@@ -402,6 +402,7 @@ void MoteusEnsureOff() {
     gpio_t enable;
     gpio_init_out(&enable, moteus::g_hw_pins.drv8323_enable);
     gpio_write(&enable, 0);
+  }
 
   // We want to ensure that our primary interrupt is not running.
   // Which one it is could vary, so just turn them all off.
