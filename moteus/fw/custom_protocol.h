@@ -6,8 +6,8 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
-#include <string_view>
 #include <mbed.h>
+#include <string_view>
 
 #include "fw/bldc_servo.h"
 #include "fw/error.h"
@@ -47,11 +47,11 @@ public:
         fuda_config_ != nullptr ? fuda_config_->calib_current : 0.0f;
     config_.calib_voltage =
         fuda_config_ != nullptr ? fuda_config_->calib_voltage : 0.0f;
-    config_.control_mode =
-        fuda_config_ != nullptr &&
-                fuda_config_->control_mode >= 0 &&
-                fuda_config_->control_mode <= 3 ?
-            fuda_config_->control_mode : 0;
+    config_.control_mode = fuda_config_ != nullptr &&
+                                   fuda_config_->control_mode >= 0 &&
+                                   fuda_config_->control_mode <= 3
+                               ? fuda_config_->control_mode
+                               : 0;
     config_.sync_target_enable =
         fuda_config_ != nullptr ? fuda_config_->sync_target_enable : 0;
     config_.position_filter_bw =
@@ -90,9 +90,9 @@ public:
     config_.motor_pole_pairs = motor.poles / 2;
     config_.motor_phase_resistance = motor.resistance_ohm;
     config_.motor_phase_inductance =
-        (motor.inductance_q_H > 0.0f) ?
-            ((motor.inductance_d_H + motor.inductance_q_H) * 0.5f) :
-            motor.inductance_d_H;
+        (motor.inductance_q_H > 0.0f)
+            ? ((motor.inductance_d_H + motor.inductance_q_H) * 0.5f)
+            : motor.inductance_d_H;
     config_.current_limit = servo_config.max_current_A;
     config_.velocity_limit = servo_config.max_velocity;
     config_.pos_gain = servo_config.pid_position.kp;
@@ -114,8 +114,7 @@ public:
     config_.protect_over_current = servo_config.max_current_A;
     config_.protect_i_bus_max = CleanFloat(servo_config.max_regen_power_W);
     config_.node_id = multiplex_protocol_->config()->id;
-    config_.calib_valid =
-        motor.poles != 0 && (motor.poles % 2) == 0 ? 1 : 0;
+    config_.calib_valid = motor.poles != 0 && (motor.poles % 2) == 0 ? 1 : 0;
     if (fuda_config_ != nullptr) {
       config_.sync_target_enable = fuda_config_->sync_target_enable;
       config_.position_filter_bw = fuda_config_->position_filter_bw;
@@ -501,8 +500,7 @@ private:
       switch (index) {
       case CONFIG_INVERT_MOTOR_DIR: {
         if (position_config != nullptr) {
-          position_config->output.sign =
-              config_.invert_motor_dir != 0 ? -1 : 1;
+          position_config->output.sign = config_.invert_motor_dir != 0 ? -1 : 1;
           config_.encoder_dir = config_.invert_motor_dir;
           bldc_servo_->ApplyMotorPositionConfig();
           bldc_servo_->RecapturePositionVelocity();
@@ -636,8 +634,8 @@ private:
         fuda_config_->can_baudrate = config_.can_baudrate;
       }
     }
-    if (index == CONFIG_CONTROL_MODE &&
-        config_.control_mode >= 0 && config_.control_mode <= 3) {
+    if (index == CONFIG_CONTROL_MODE && config_.control_mode >= 0 &&
+        config_.control_mode <= 3) {
       if (fuda_config_ != nullptr) {
         fuda_config_->control_mode = config_.control_mode;
       }
@@ -667,15 +665,13 @@ private:
       ms_since_last_receive_ = 0;
       heartbeat_consumer_timed_out_ = false;
       if (fuda_config_ != nullptr) {
-        fuda_config_->heartbeat_consumer_ms =
-            config_.heartbeat_consumer_ms;
+        fuda_config_->heartbeat_consumer_ms = config_.heartbeat_consumer_ms;
       }
     }
     if (index == CONFIG_HEARTBEAT_PRODUCER_MS &&
         config_.heartbeat_producer_ms >= 0) {
       if (fuda_config_ != nullptr) {
-        fuda_config_->heartbeat_producer_ms =
-            config_.heartbeat_producer_ms;
+        fuda_config_->heartbeat_producer_ms = config_.heartbeat_producer_ms;
       }
     }
   }
@@ -855,9 +851,9 @@ private:
       *raw_value = ToRaw(config_.invert_motor_dir);
       break;
     case CONFIG_INERTIA:
-      *raw_value =
-          ToRaw(bldc_servo_ != nullptr ?
-                bldc_servo_->config().inertia_feedforward : config_.inertia);
+      *raw_value = ToRaw(bldc_servo_ != nullptr
+                             ? bldc_servo_->config().inertia_feedforward
+                             : config_.inertia);
       break;
     case CONFIG_TORQUE_CONSTANT:
       *raw_value = ToRaw(config_.torque_constant);
@@ -1368,26 +1364,23 @@ private:
   }
 
   class CommandResponseStream : public mjlib::micro::AsyncWriteStream {
-   public:
-    void AsyncWriteSome(const std::string_view& data,
-                        const mjlib::micro::SizeCallback& callback) override {
-      const auto copy_size =
-          std::min(data.size(), sizeof(buffer_) - size_);
+  public:
+    void AsyncWriteSome(const std::string_view &data,
+                        const mjlib::micro::SizeCallback &callback) override {
+      const auto copy_size = std::min(data.size(), sizeof(buffer_) - size_);
       std::memcpy(buffer_ + size_, data.data(), copy_size);
       size_ += copy_size;
       callback({}, data.size());
     }
 
-    bool ok() const {
-      return std::string_view(buffer_, size_) == "OK\r\n";
-    }
+    bool ok() const { return std::string_view(buffer_, size_) == "OK\r\n"; }
 
-   private:
+  private:
     char buffer_[16] = {};
     std::size_t size_ = 0;
   };
 
-  bool ExecutePersistentConfigCommand(const std::string_view& command) {
+  bool ExecutePersistentConfigCommand(const std::string_view &command) {
     CommandResponseStream stream;
     bool callback_error = false;
     persistent_config_->Command(
@@ -1408,9 +1401,9 @@ private:
     char reply[4] = {0};
     std::memcpy(reply, &result, sizeof(result));
     SendFrame(Send << DirOffset |
-                         (multiplex_protocol_->config()->id << NodeOffset) |
-                         CAN_CMD_SAVE_ALL_CONFIG,
-                     4, reply);
+                  (multiplex_protocol_->config()->id << NodeOffset) |
+                  CAN_CMD_SAVE_ALL_CONFIG,
+              4, reply);
     return true;
   }
   bool HandleResetAllConfig(int dlc, const char *data) {
@@ -1422,14 +1415,13 @@ private:
     if (bldc_servo_->status().mode != BldcServo::Mode::kStopped) {
       char reply[4] = {0xff};
       SendFrame(Send << DirOffset |
-                         (multiplex_protocol_->config()->id << NodeOffset) |
-                         CAN_CMD_RESET_ALL_CONFIG,
-                     4, reply);
+                    (multiplex_protocol_->config()->id << NodeOffset) |
+                    CAN_CMD_RESET_ALL_CONFIG,
+                4, reply);
       return false;
     }
 
-    const int32_t result =
-        ExecutePersistentConfigCommand("default") ? 0 : -1;
+    const int32_t result = ExecutePersistentConfigCommand("default") ? 0 : -1;
     if (result == 0) {
       Init();
     }
@@ -1437,13 +1429,20 @@ private:
     char reply[4] = {0};
     std::memcpy(reply, &result, sizeof(result));
     SendFrame(Send << DirOffset |
-                         (multiplex_protocol_->config()->id << NodeOffset) |
-                         CAN_CMD_RESET_ALL_CONFIG,
-                     4, reply);
+                  (multiplex_protocol_->config()->id << NodeOffset) |
+                  CAN_CMD_RESET_ALL_CONFIG,
+              4, reply);
     return true;
   }
   bool HandleHeartbeat(int dlc, const char *data) { return true; }
-  bool HandleReply(int dlc, const char *data) { return true; }
+  bool HandleReply(int dlc, const char *data) {
+    char reply[4] = {0};
+    SendFrame(Send << DirOffset |
+                  (multiplex_protocol_->config()->id << NodeOffset) |
+                  CAN_CMD_REPLY,
+              0, reply);
+    return true;
+  }
   bool HandleStartAuto(int dlc, const char *data) {
     auto_value_1_enabled_ = (data[0] == 1);
 
