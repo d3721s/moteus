@@ -796,10 +796,19 @@ QWidget *MainWindow::createLogPanel()
     layout->setContentsMargins(8, 8, 8, 8);
 
     auto *clearButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogResetButton), QStringLiteral("清空日志"), box);
+    m_filterCanLogCheck = new QCheckBox(QStringLiteral("过滤"), box);
+    m_filterCanLogCheck->setChecked(true);
     connect(clearButton, &QPushButton::clicked, this, [this]() {
         m_logTable->setRowCount(0);
     });
-    layout->addWidget(clearButton, 0, Qt::AlignLeft);
+
+    auto *toolbarLayout = new QHBoxLayout();
+    toolbarLayout->setContentsMargins(0, 0, 0, 0);
+    toolbarLayout->setSpacing(12);
+    toolbarLayout->addWidget(clearButton);
+    toolbarLayout->addWidget(m_filterCanLogCheck);
+    toolbarLayout->addStretch(1);
+    layout->addLayout(toolbarLayout);
 
     m_logTable = new QTableWidget(box);
     m_logTable->setColumnCount(8);
@@ -1531,7 +1540,7 @@ bool MainWindow::encodeConfigValue(const ConfigDef &config, const QString &text,
 
 void MainWindow::handleReceivedFrame(const QCanBusFrame &frame)
 {
-    if (shouldFilterCanLogFrame(frame)) {
+    if (m_filterCanLogCheck && m_filterCanLogCheck->isChecked() && shouldFilterCanLogFrame(frame)) {
         return;
     }
 
@@ -1541,7 +1550,7 @@ void MainWindow::handleReceivedFrame(const QCanBusFrame &frame)
 
 void MainWindow::handleTransmittedFrame(const QCanBusFrame &frame)
 {
-    if (shouldFilterCanLogFrame(frame)) {
+    if (m_filterCanLogCheck && m_filterCanLogCheck->isChecked() && shouldFilterCanLogFrame(frame)) {
         return;
     }
 

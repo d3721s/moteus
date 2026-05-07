@@ -112,6 +112,7 @@ private:
     QTableWidget *m_commandTable = nullptr;
     QTableWidget *m_configTable = nullptr;
     QTableWidget *m_logTable = nullptr;
+    QCheckBox *m_filterCanLogCheck = nullptr;
     ProcessPanel m_calibrationProcess;
     ProcessPanel m_anticoggingProcess;
     ProcessPanel m_dfuProcess;
