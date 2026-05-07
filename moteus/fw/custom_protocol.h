@@ -168,7 +168,6 @@ private:
   static constexpr uint8_t DirOffset = 10;
   static constexpr uint8_t NodeOffset = 5;
   static constexpr uint8_t CmdOffset = 0;
-  static constexpr uint32_t DefaultHeartbeatProducerMs = 4000;
 
   static float CleanFloat(float value) {
     return std::isnan(value) ? 0.0f : value;
@@ -412,10 +411,12 @@ private:
   }
 
   void PollHeartbeatProducer() {
+    if (config_.heartbeat_producer_ms <= 0) {
+      return;
+    }
+
     const uint32_t producer_ms =
-        config_.heartbeat_producer_ms > 0
-            ? static_cast<uint32_t>(config_.heartbeat_producer_ms)
-            : DefaultHeartbeatProducerMs;
+        static_cast<uint32_t>(config_.heartbeat_producer_ms);
     if (ms_since_last_send_ < producer_ms) {
       return;
     }
