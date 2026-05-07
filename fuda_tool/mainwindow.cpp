@@ -1197,7 +1197,7 @@ void MainWindow::startOneClickDfuFlash()
 
     QString command = QStringLiteral("python3 -m moteus.moteus_tool --flash %1").arg(shellQuote(m_selectedElfPath));
     if (m_bootloaderActiveCheck && m_bootloaderActiveCheck->isChecked()) {
-        command += QStringLiteral(" --bootloader-active");
+        command += QStringLiteral(" --bootloader-active --target %1").arg(currentNodeId());
     }
     startProcessPanel(&m_dfuProcess, command);
 }
