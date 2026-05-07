@@ -7,6 +7,7 @@
 
 #include <QApplication>
 #include <QAbstractItemView>
+#include <QCloseEvent>
 #include <QDateTime>
 #include <QDoubleValidator>
 #include <QGridLayout>
@@ -191,7 +192,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_canThread, &QThread::finished, m_canService, &QObject::deleteLater);
     m_canThread->start();
 
-    setWindowTitle(QStringLiteral("fuda_tool - SocketCAN 测试工具"));
+    setWindowTitle(QStringLiteral("福达驱动器测试工具"));
     resize(1320, 840);
 
     auto *central = new QWidget(this);
@@ -236,16 +237,49 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    stopProcessPanel(&m_calibrationProcess, true);
-    stopProcessPanel(&m_anticoggingProcess, true);
+    shutdownWorkers();
+}
 
-    if (!m_canThread || !m_canThread->isRunning()) {
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    shutdownWorkers();
+    QMainWindow::closeEvent(event);
+}
+
+void MainWindow::shutdownWorkers()
+{
+    if (m_shuttingDown) {
         return;
     }
 
-    QMetaObject::invokeMethod(m_canService, "disconnectInterface", Qt::BlockingQueuedConnection);
-    m_canThread->quit();
-    m_canThread->wait();
+    m_shuttingDown = true;
+    stopProcessPanel(&m_calibrationProcess, true);
+    stopProcessPanel(&m_anticoggingProcess, true);
+    shutdownCanThread();
+}
+
+void MainWindow::shutdownCanThread()
+{
+    if (!m_canThread) {
+        m_canService = nullptr;
+        return;
+    }
+
+    QThread *thread = m_canThread;
+    CanService *service = m_canService;
+    m_canThread = nullptr;
+    m_canService = nullptr;
+
+    if (thread->isRunning()) {
+        if (service) {
+            QMetaObject::invokeMethod(service, "disconnectInterface", Qt::BlockingQueuedConnection);
+        }
+        thread->quit();
+        if (!thread->wait(3000)) {
+            thread->terminate();
+            thread->wait(1000);
+        }
+    }
 }
 
 QWidget *MainWindow::createConnectionPanel()
@@ -505,8 +539,8 @@ QWidget *MainWindow::createCalibrationPanel()
     auto *encoderOffsetButton = new QPushButton(QStringLiteral("读取编码器偏移"), box);
     auto *setHomeButton = new QPushButton(QStringLiteral("设置当前位置为零点"), box);
     auto *saveButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("保存配置"), box);
-    m_calibrationProcess.startButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("一键校准"), box);
-    m_calibrationProcess.stopButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("结束一键校准"), box);
+    m_calibrationProcess.startButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("一键电机校准"), box);
+    m_calibrationProcess.stopButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("结束电机校准"), box);
     m_calibrationProcess.stopButton->setEnabled(false);
     m_calibrationProcess.outputEdit = new QPlainTextEdit(box);
     m_calibrationProcess.outputEdit->setReadOnly(true);
@@ -1013,13 +1047,13 @@ void MainWindow::sendConfigWrite(quint32 index)
 
 void MainWindow::startOneClickCalibration()
 {
-    const QString command = QStringLiteral("PYTHONUNBUFFERED=1 python3 -u -m moteus.moteus_tool --target 1 --calibrate --verbose --cal-never-encoder-current-mode");
+    const QString command = QStringLiteral("python3 -u -m moteus.moteus_tool --target 1 --calibrate --verbose --cal-never-encoder-current-mode");
     startProcessPanel(&m_calibrationProcess, command);
 }
 
 void MainWindow::startOneClickAnticogging()
 {
-    const QString command = QStringLiteral("PYTHONUNBUFFERED=1 python3 -u compensate_cogging.py --target 1 --store -v");
+    const QString command = QStringLiteral("python3 -u compensate_cogging.py --target 1 --store -v");
     startProcessPanel(&m_anticoggingProcess, command);
 }
 
@@ -1036,7 +1070,7 @@ void MainWindow::startProcessPanel(ProcessPanel *panel, const QString &command)
     panel->outputEdit->clear();
     panel->currentLine.clear();
     panel->liveLineVisible = false;
-    appendProcessOutput(panel, QStringLiteral("执行命令：bash -lc \"%1\"\n\n").arg(command));
+    appendProcessOutput(panel, QStringLiteral("执行命令：bash -lc \"exec %1\"\n\n").arg(command));
 
     panel->running = true;
     if (panel->startButton) {
@@ -1194,8 +1228,12 @@ void MainWindow::stopProcessPanel(ProcessPanel *panel, bool waitForThread)
         }
     }
 
-    panel->thread->quit();
-    panel->thread->wait(3000);
+    QThread *thread = panel->thread;
+    thread->quit();
+    if (!thread->wait(5000)) {
+        thread->terminate();
+        thread->wait(1000);
+    }
     panel->running = false;
     panel->runner = nullptr;
     panel->thread = nullptr;

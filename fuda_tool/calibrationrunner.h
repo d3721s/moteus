@@ -13,6 +13,7 @@ class CalibrationRunner : public QObject
 
 public:
     explicit CalibrationRunner(const QString &command, QObject *parent = nullptr);
+    ~CalibrationRunner() override;
 
 public slots:
     void start();

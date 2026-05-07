@@ -11,6 +11,7 @@
 
 class CalibrationRunner;
 class CanService;
+class QCloseEvent;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -34,6 +35,9 @@ signals:
     void disconnectCanInterfaceRequested();
     void sendCanCommandRequested(quint8 nodeId, quint8 commandId, const QByteArray &payload);
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private:
     QWidget *createConnectionPanel();
     QWidget *createCommandPanel();
@@ -46,6 +50,8 @@ private:
 
     void setupCanConnections();
     void applyVisualStyle();
+    void shutdownWorkers();
+    void shutdownCanThread();
 
     void sendProtocolCommand(quint8 commandId);
     void sendRawProtocolCommand(quint8 commandId, const QByteArray &payload);
@@ -104,6 +110,7 @@ private:
     QTableWidget *m_logTable = nullptr;
     ProcessPanel m_calibrationProcess;
     ProcessPanel m_anticoggingProcess;
+    bool m_shuttingDown = false;
 
     QLabel *m_lastNodeLabel = nullptr;
     QLabel *m_lastCommandLabel = nullptr;

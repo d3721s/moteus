@@ -1,6 +1,7 @@
 #include "calibrationrunner.h"
 
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QTimer>
 
 namespace
@@ -12,6 +13,17 @@ CalibrationRunner::CalibrationRunner(const QString &command, QObject *parent)
     : QObject(parent)
     , m_command(command)
 {
+}
+
+CalibrationRunner::~CalibrationRunner()
+{
+    if (m_process && m_process->state() != QProcess::NotRunning) {
+        m_process->terminate();
+        if (!m_process->waitForFinished(1000)) {
+            m_process->kill();
+            m_process->waitForFinished(1000);
+        }
+    }
 }
 
 void CalibrationRunner::start()
@@ -48,7 +60,10 @@ void CalibrationRunner::start()
             });
 
     m_process->setProcessChannelMode(QProcess::SeparateChannels);
-    m_process->start(QStringLiteral("bash"), {QStringLiteral("-lc"), m_command});
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("PYTHONUNBUFFERED"), QStringLiteral("1"));
+    m_process->setProcessEnvironment(environment);
+    m_process->start(QStringLiteral("bash"), {QStringLiteral("-lc"), QStringLiteral("exec %1").arg(m_command)});
 }
 
 void CalibrationRunner::stop()
