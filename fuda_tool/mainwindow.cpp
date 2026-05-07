@@ -31,6 +31,7 @@
 #include <QTabWidget>
 #include <QTextCursor>
 #include <QThread>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <limits>
@@ -971,13 +972,8 @@ void MainWindow::sendProtocolCommand(quint8 commandId)
         return;
     }
 
-    if (commandId == 20) {
-        const auto result = QMessageBox::question(this,
-                                                  QStringLiteral("确认恢复出厂配置"),
-                                                  QStringLiteral("该命令会恢复全部配置，且仅在失能下有效。确认发送？"));
-        if (result != QMessageBox::Yes) {
-            return;
-        }
+    if (commandId == 20 && !confirmFactoryReset()) {
+        return;
     }
 
     QByteArray payload;
@@ -997,6 +993,32 @@ void MainWindow::sendProtocolCommand(quint8 commandId)
     }
 
     emit sendCanCommandRequested(currentNodeId(), commandId, payload);
+}
+
+bool MainWindow::confirmFactoryReset()
+{
+    QMessageBox box(this);
+    box.setWindowTitle(QStringLiteral("确认恢复出厂配置"));
+    box.setIcon(QMessageBox::Warning);
+    box.setText(QStringLiteral("该命令会恢复全部配置，且仅在失能下有效。"));
+    box.setInformativeText(QStringLiteral("确认发送恢复出厂配置命令？"));
+    box.setMinimumWidth(520);
+
+    QPushButton *confirmButton = box.addButton(QStringLiteral("确认发送"), QMessageBox::AcceptRole);
+    QPushButton *cancelButton = box.addButton(QStringLiteral("取消"), QMessageBox::RejectRole);
+    confirmButton->setMinimumWidth(128);
+    cancelButton->setMinimumWidth(128);
+    box.setDefaultButton(cancelButton);
+    box.setEscapeButton(cancelButton);
+
+    QTimer::singleShot(0, &box, [this, &box]() {
+        const QPoint center = frameGeometry().center();
+        const QRect dialogGeometry = box.frameGeometry();
+        box.move(center.x() - dialogGeometry.width() / 2, center.y() - dialogGeometry.height() / 2);
+    });
+
+    box.exec();
+    return box.clickedButton() == confirmButton;
 }
 
 void MainWindow::sendRawProtocolCommand(quint8 commandId, const QByteArray &payload)
@@ -1047,13 +1069,13 @@ void MainWindow::sendConfigWrite(quint32 index)
 
 void MainWindow::startOneClickCalibration()
 {
-    const QString command = QStringLiteral("python3 -u -m moteus.moteus_tool --target 1 --calibrate --cal-never-encoder-current-mode --cal-write-raw my_cal_data.bin");
+    const QString command = QStringLiteral("MOTEUS_CAL_DIR=/tmp python3 -u -m moteus.moteus_tool --calibrate --cal-never-encoder-current-mode");
     startProcessPanel(&m_calibrationProcess, command);
 }
 
 void MainWindow::startOneClickAnticogging()
 {
-    const QString command = QStringLiteral("python3 -u compensate_cogging.py --target 1 --store -v");
+    const QString command = QStringLiteral("python3 -u compensate_cogging.py --store -v");
     startProcessPanel(&m_anticoggingProcess, command);
 }
 
@@ -1070,7 +1092,7 @@ void MainWindow::startProcessPanel(ProcessPanel *panel, const QString &command)
     panel->outputEdit->clear();
     panel->currentLine.clear();
     panel->liveLineVisible = false;
-    appendProcessOutput(panel, QStringLiteral("执行命令：bash -lc \"exec %1\"\n\n").arg(command));
+    appendProcessOutput(panel, QStringLiteral("开始执行命令。\n\n"));
 
     panel->running = true;
     if (panel->startButton) {

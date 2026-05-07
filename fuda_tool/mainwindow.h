@@ -52,6 +52,7 @@ private:
     void applyVisualStyle();
     void shutdownWorkers();
     void shutdownCanThread();
+    bool confirmFactoryReset();
 
     void sendProtocolCommand(quint8 commandId);
     void sendRawProtocolCommand(quint8 commandId, const QByteArray &payload);
