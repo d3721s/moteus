@@ -13,6 +13,7 @@
 #include "fw/error.h"
 #include "fw/fdcan.h"
 #include "fw/fuda.h"
+#include "fw/math.h"
 #include "fw/moteus_hw.h"
 #include "fw/torque_model.h"
 #include "mjlib/micro/command_manager.h"
@@ -189,6 +190,12 @@ private:
     float result = 0.0f;
     std::memcpy(&result, &value, sizeof(result));
     return result;
+  }
+
+  static constexpr float TorqueConstantToKv(float torque_constant) {
+    constexpr float kTorqueFactor =
+        (3.0f / 2.0f) * (1.0f / kSqrt3) * (60.0f / k2Pi);
+    return kTorqueFactor / torque_constant;
   }
 
   static int32_t ToInt32(uint32_t value) {
@@ -460,8 +467,6 @@ private:
       auto &servo_config =
           const_cast<BldcServo::Config &>(bldc_servo_->config());
       auto &motor = const_cast<BldcServo::Motor &>(bldc_servo_->motor());
-      auto &torque_model =
-          const_cast<TorqueModel &>(bldc_servo_->torque_model());
       auto *position_config = bldc_servo_->motor_position_config();
 
       switch (index) {
@@ -480,9 +485,8 @@ private:
         break;
       }
       case CONFIG_TORQUE_CONSTANT: {
-        torque_model = TorqueModel(
-            config_.torque_constant, motor.rotation_current_cutoff_A,
-            motor.rotation_current_scale, motor.rotation_torque_scale);
+        motor.Kv = TorqueConstantToKv(config_.torque_constant);
+        bldc_servo_->ApplyConfig();
         break;
       }
       case CONFIG_MOTOR_POLE_PAIRS: {
@@ -651,9 +655,14 @@ private:
     case CONFIG_INERTIA:
       config_.inertia = ToFloat(raw_value);
       break;
-    case CONFIG_TORQUE_CONSTANT:
-      config_.torque_constant = ToFloat(raw_value);
+    case CONFIG_TORQUE_CONSTANT: {
+      const float value = ToFloat(raw_value);
+      if (!std::isfinite(value) || value <= 0.0f) {
+        return false;
+      }
+      config_.torque_constant = value;
       break;
+    }
     case CONFIG_MOTOR_POLE_PAIRS: {
       const int32_t value = ToInt32(raw_value);
       if (value <= 0 || value > 127) {

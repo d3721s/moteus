@@ -257,6 +257,10 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
     return motor_position_->config();
   }
 
+  void ApplyConfig() {
+    UpdateConfig();
+  }
+
   void ApplyMotorPositionConfig() {
     motor_position_->ApplyConfig();
     main_motor_position_epoch_ = motor_position_->status().epoch;
@@ -1514,6 +1518,10 @@ MotorPosition::Config* BldcServo::motor_position_config() {
 
 const MotorPosition::Config* BldcServo::motor_position_config() const {
   return impl_->motor_position_config();
+}
+
+void BldcServo::ApplyConfig() {
+  impl_->ApplyConfig();
 }
 
 void BldcServo::ApplyMotorPositionConfig() {
