@@ -6,6 +6,7 @@
 #include <QCanBusFrame>
 #include <QMainWindow>
 #include <QMap>
+#include <QPointer>
 #include <QVector>
 
 class CanService;
@@ -52,6 +53,8 @@ private:
     void sendConfigWrite(quint32 index);
     void startOneClickCalibration();
     void appendCalibrationOutput(const QString &text);
+    void finishOneClickCalibration(const QString &message);
+    void stopOneClickCalibrationProcess();
     bool buildCommandPayload(const CommandDef &command, QByteArray *payload, QString *error) const;
     bool encodeConfigValue(const ConfigDef &config, const QString &text, QByteArray *payload, QString *error) const;
 
@@ -84,7 +87,9 @@ private:
     QTableWidget *m_logTable = nullptr;
     QPushButton *m_oneClickCalibrateButton = nullptr;
     QPlainTextEdit *m_calibrationOutputEdit = nullptr;
-    QProcess *m_calibrationProcess = nullptr;
+    QThread *m_calibrationThread = nullptr;
+    QPointer<QProcess> m_calibrationProcess;
+    bool m_calibrationRunning = false;
 
     QLabel *m_lastNodeLabel = nullptr;
     QLabel *m_lastCommandLabel = nullptr;

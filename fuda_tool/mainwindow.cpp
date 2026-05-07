@@ -34,6 +34,7 @@
 #include <QVBoxLayout>
 
 #include <limits>
+#include <memory>
 
 namespace
 {
@@ -209,13 +210,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    if (m_calibrationProcess && m_calibrationProcess->state() != QProcess::NotRunning) {
-        m_calibrationProcess->terminate();
-        if (!m_calibrationProcess->waitForFinished(3000)) {
-            m_calibrationProcess->kill();
-            m_calibrationProcess->waitForFinished(1000);
-        }
-    }
+    stopOneClickCalibrationProcess();
 
     if (!m_canThread || !m_canThread->isRunning()) {
         return;
@@ -489,9 +484,6 @@ QWidget *MainWindow::createCalibrationPanel()
     m_calibrationOutputEdit->setMinimumHeight(220);
     m_calibrationOutputEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
 
-    m_calibrationProcess = new QProcess(this);
-    m_calibrationProcess->setProcessChannelMode(QProcess::SeparateChannels);
-
     connect(startButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(5); });
     connect(abortButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(7); });
     connect(statusButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(13); });
@@ -501,30 +493,6 @@ QWidget *MainWindow::createCalibrationPanel()
     connect(setHomeButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(11); });
     connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19); });
     connect(m_oneClickCalibrateButton, &QPushButton::clicked, this, &MainWindow::startOneClickCalibration);
-    connect(m_calibrationProcess, &QProcess::readyReadStandardOutput, this, [this]() {
-        appendCalibrationOutput(QString::fromUtf8(m_calibrationProcess->readAllStandardOutput()));
-    });
-    connect(m_calibrationProcess, &QProcess::readyReadStandardError, this, [this]() {
-        appendCalibrationOutput(QString::fromUtf8(m_calibrationProcess->readAllStandardError()));
-    });
-    connect(m_calibrationProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
-        appendCalibrationOutput(QStringLiteral("\n进程错误：%1\n").arg(m_calibrationProcess->errorString()));
-        if (m_calibrationProcess->state() == QProcess::NotRunning && m_oneClickCalibrateButton) {
-            m_oneClickCalibrateButton->setEnabled(true);
-        }
-    });
-    connect(m_calibrationProcess,
-            QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this,
-            [this](int exitCode, QProcess::ExitStatus exitStatus) {
-                const QString result = exitStatus == QProcess::NormalExit
-                    ? QStringLiteral("\n进程结束，退出码：%1\n").arg(exitCode)
-                    : QStringLiteral("\n进程异常结束\n");
-                appendCalibrationOutput(result);
-                if (m_oneClickCalibrateButton) {
-                    m_oneClickCalibrateButton->setEnabled(true);
-                }
-            });
 
     layout->addWidget(startButton, 0, 0);
     layout->addWidget(abortButton, 0, 1);
@@ -999,22 +967,97 @@ void MainWindow::sendConfigWrite(quint32 index)
 
 void MainWindow::startOneClickCalibration()
 {
-    if (!m_calibrationProcess || !m_calibrationOutputEdit) {
+    if (!m_calibrationOutputEdit) {
         return;
     }
-    if (m_calibrationProcess->state() != QProcess::NotRunning) {
+    if (m_calibrationRunning) {
         appendCalibrationOutput(QStringLiteral("\n校准进程正在运行。\n"));
         return;
     }
 
-    const QString command = QStringLiteral("python3 -m moteus.moteus_tool --target 1 --calibrate --cal-never-encoder-current-mode");
+    const QString command = QStringLiteral("PYTHONUNBUFFERED=1 python3 -u -m moteus.moteus_tool --target 1 --calibrate --cal-never-encoder-current-mode");
     m_calibrationOutputEdit->clear();
     appendCalibrationOutput(QStringLiteral("执行命令：bash -lc \"%1\"\n\n").arg(command));
 
+    m_calibrationRunning = true;
     if (m_oneClickCalibrateButton) {
         m_oneClickCalibrateButton->setEnabled(false);
     }
-    m_calibrationProcess->start(QStringLiteral("bash"), {QStringLiteral("-lc"), command});
+
+    auto *thread = new QThread(this);
+    auto *worker = new QObject;
+    worker->moveToThread(thread);
+    m_calibrationThread = thread;
+    m_calibrationProcess = nullptr;
+
+    connect(thread, &QThread::finished, worker, &QObject::deleteLater);
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    connect(thread, &QThread::finished, this, [this, thread]() {
+        if (m_calibrationThread == thread) {
+            m_calibrationThread = nullptr;
+            m_calibrationProcess = nullptr;
+        }
+    });
+
+    connect(thread, &QThread::started, worker, [this, worker, thread, command]() {
+        auto *process = new QProcess(worker);
+        auto completed = std::make_shared<bool>(false);
+        process->setProcessChannelMode(QProcess::SeparateChannels);
+
+        QMetaObject::invokeMethod(this, [this, process]() {
+            m_calibrationProcess = process;
+        }, Qt::QueuedConnection);
+
+        auto appendOutput = [this](const QString &text) {
+            QMetaObject::invokeMethod(this, [this, text]() {
+                appendCalibrationOutput(text);
+            }, Qt::QueuedConnection);
+        };
+
+        connect(process, &QProcess::readyReadStandardOutput, worker, [process, appendOutput]() {
+            appendOutput(QString::fromUtf8(process->readAllStandardOutput()));
+        });
+        connect(process, &QProcess::readyReadStandardError, worker, [process, appendOutput]() {
+            appendOutput(QString::fromUtf8(process->readAllStandardError()));
+        });
+        connect(process, &QProcess::errorOccurred, worker, [this, process, thread, completed, appendOutput](QProcess::ProcessError error) {
+            appendOutput(QStringLiteral("\n进程错误：%1\n").arg(process->errorString()));
+            if (error == QProcess::FailedToStart && !*completed) {
+                *completed = true;
+                QMetaObject::invokeMethod(this, [this]() {
+                    finishOneClickCalibration(QStringLiteral("\n进程启动失败\n"));
+                }, Qt::QueuedConnection);
+                process->deleteLater();
+                thread->quit();
+            }
+        });
+        connect(process,
+                QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                worker,
+                [this, process, thread, completed](int exitCode, QProcess::ExitStatus exitStatus) {
+                    if (*completed) {
+                        return;
+                    }
+                    *completed = true;
+
+                    const QString output = QString::fromUtf8(process->readAllStandardOutput())
+                        + QString::fromUtf8(process->readAllStandardError());
+                    const QString result = exitStatus == QProcess::NormalExit
+                        ? QStringLiteral("\n进程结束，退出码：%1\n").arg(exitCode)
+                        : QStringLiteral("\n进程异常结束\n");
+
+                    QMetaObject::invokeMethod(this, [this, output, result]() {
+                        appendCalibrationOutput(output);
+                        finishOneClickCalibration(result);
+                    }, Qt::QueuedConnection);
+                    process->deleteLater();
+                    thread->quit();
+                });
+
+        process->start(QStringLiteral("bash"), {QStringLiteral("-lc"), command});
+    });
+
+    thread->start();
 }
 
 void MainWindow::appendCalibrationOutput(const QString &text)
@@ -1026,6 +1069,46 @@ void MainWindow::appendCalibrationOutput(const QString &text)
     m_calibrationOutputEdit->moveCursor(QTextCursor::End);
     m_calibrationOutputEdit->insertPlainText(text);
     m_calibrationOutputEdit->moveCursor(QTextCursor::End);
+}
+
+void MainWindow::finishOneClickCalibration(const QString &message)
+{
+    appendCalibrationOutput(message);
+    m_calibrationRunning = false;
+    m_calibrationProcess = nullptr;
+    if (m_oneClickCalibrateButton) {
+        m_oneClickCalibrateButton->setEnabled(true);
+    }
+}
+
+void MainWindow::stopOneClickCalibrationProcess()
+{
+    if (!m_calibrationThread || !m_calibrationThread->isRunning()) {
+        m_calibrationRunning = false;
+        m_calibrationProcess = nullptr;
+        m_calibrationThread = nullptr;
+        return;
+    }
+
+    QProcess *process = m_calibrationProcess.data();
+    if (process) {
+        QMetaObject::invokeMethod(process, [process]() {
+            if (process->state() == QProcess::NotRunning) {
+                return;
+            }
+            process->terminate();
+            if (!process->waitForFinished(3000)) {
+                process->kill();
+                process->waitForFinished(1000);
+            }
+        }, Qt::BlockingQueuedConnection);
+    }
+
+    m_calibrationThread->quit();
+    m_calibrationThread->wait(3000);
+    m_calibrationRunning = false;
+    m_calibrationProcess = nullptr;
+    m_calibrationThread = nullptr;
 }
 
 bool MainWindow::buildCommandPayload(const CommandDef &command, QByteArray *payload, QString *error) const
