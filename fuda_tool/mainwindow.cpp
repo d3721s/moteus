@@ -572,8 +572,8 @@ QWidget *MainWindow::createCalibrationPanel()
     connect(calibValidButton, &QPushButton::clicked, this, [this]() { sendConfigRead(34); });
     connect(encoderDirButton, &QPushButton::clicked, this, [this]() { sendConfigRead(35); });
     connect(encoderOffsetButton, &QPushButton::clicked, this, [this]() { sendConfigRead(36); });
-    connect(setHomeButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(11); });
-    connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19); });
+    connect(setHomeButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(11, false); });
+    connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19, false); });
     connect(m_calibrationProcess.startButton, &QPushButton::clicked, this, &MainWindow::startOneClickCalibration);
     connect(m_calibrationProcess.stopButton, &QPushButton::clicked, this, &MainWindow::stopOneClickCalibrationProcess);
 
@@ -622,14 +622,14 @@ QWidget *MainWindow::createAnticoggingPanel()
     connect(abortButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(10); });
     connect(statusButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(13); });
     connect(enableButton, &QPushButton::clicked, this, [this]() {
-        sendRawProtocolCommand(17, PayloadCodec::encodeUInt32(16) + PayloadCodec::encodeInt32(1));
+        sendRawProtocolCommand(17, PayloadCodec::encodeUInt32(16) + PayloadCodec::encodeInt32(1), false);
     });
     connect(disableButton, &QPushButton::clicked, this, [this]() {
-        sendRawProtocolCommand(17, PayloadCodec::encodeUInt32(16) + PayloadCodec::encodeInt32(0));
+        sendRawProtocolCommand(17, PayloadCodec::encodeUInt32(16) + PayloadCodec::encodeInt32(0), false);
     });
     connect(readEnableButton, &QPushButton::clicked, this, [this]() { sendConfigRead(16); });
     connect(readLutButton, &QPushButton::clicked, this, [this]() { sendConfigRead(37); });
-    connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19); });
+    connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19, false); });
     connect(m_anticoggingProcess.startButton, &QPushButton::clicked, this, &MainWindow::startOneClickAnticogging);
     connect(m_anticoggingProcess.stopButton, &QPushButton::clicked, this, &MainWindow::stopOneClickAnticoggingProcess);
 
@@ -1005,7 +1005,7 @@ void MainWindow::applyVisualStyle()
     )"));
 }
 
-void MainWindow::sendProtocolCommand(quint8 commandId)
+void MainWindow::sendProtocolCommand(quint8 commandId, bool requireConfirmation)
 {
     const CommandDef *command = Protocol::commandById(commandId);
     if (!command || !command->txAllowed) {
@@ -1028,7 +1028,7 @@ void MainWindow::sendProtocolCommand(quint8 commandId)
         return;
     }
 
-    if (!confirmProtocolCommand(*command, payload)) {
+    if (requireConfirmation && !confirmProtocolCommand(*command, payload)) {
         return;
     }
 
@@ -1216,7 +1216,7 @@ bool MainWindow::confirmFactoryReset()
                          QStringLiteral("确认发送"));
 }
 
-void MainWindow::sendRawProtocolCommand(quint8 commandId, const QByteArray &payload)
+void MainWindow::sendRawProtocolCommand(quint8 commandId, const QByteArray &payload, bool requireConfirmation)
 {
     const CommandDef *command = Protocol::commandById(commandId);
     if (!command || !command->txAllowed) {
@@ -1229,7 +1229,7 @@ void MainWindow::sendRawProtocolCommand(quint8 commandId, const QByteArray &payl
         return;
     }
 
-    if (!confirmProtocolCommand(*command, payload)) {
+    if (requireConfirmation && !confirmProtocolCommand(*command, payload)) {
         return;
     }
 

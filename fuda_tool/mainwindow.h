@@ -61,8 +61,8 @@ private:
     bool confirmConfigWritePayload(const QByteArray &payload);
     bool confirmFactoryReset();
 
-    void sendProtocolCommand(quint8 commandId);
-    void sendRawProtocolCommand(quint8 commandId, const QByteArray &payload);
+    void sendProtocolCommand(quint8 commandId, bool requireConfirmation = true);
+    void sendRawProtocolCommand(quint8 commandId, const QByteArray &payload, bool requireConfirmation = true);
     void sendConfigRead(quint32 index);
     void sendConfigWrite(quint32 index);
     void startOneClickCalibration();
