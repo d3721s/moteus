@@ -87,7 +87,10 @@ public:
     config_.torque_constant = torque_model.torque_constant_;
     config_.motor_pole_pairs = motor.poles / 2;
     config_.motor_phase_resistance = motor.resistance_ohm;
-    config_.motor_phase_inductance = motor.inductance_d_H;
+    config_.motor_phase_inductance =
+        (motor.inductance_q_H > 0.0f) ?
+            ((motor.inductance_d_H + motor.inductance_q_H) * 0.5f) :
+            motor.inductance_d_H;
     config_.current_limit = servo_config.max_current_A;
     config_.velocity_limit = servo_config.max_velocity;
     config_.pos_gain = servo_config.pid_position.kp;
