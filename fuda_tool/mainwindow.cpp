@@ -57,7 +57,7 @@ constexpr int LogCommandColumnWidth = 150;
 constexpr int LogDlcColumnWidth = 48;
 constexpr int LogDataColumnWidth = 640;
 constexpr int LogParsedColumnWidth = 1080;
-constexpr bool DebugAllowControlsWhenDisconnected = true;
+constexpr bool DebugAllowControlsWhenDisconnected = false;
 
 QTableWidgetItem *readOnlyItem(const QString &text)
 {
