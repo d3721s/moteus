@@ -62,6 +62,7 @@ void CalibrationRunner::stop()
         m_process->kill();
         m_process->waitForFinished(1000);
     }
+    complete(QStringLiteral("\n进程已强制中止\n"));
 }
 
 void CalibrationRunner::queueOutput(const QString &text)

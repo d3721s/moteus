@@ -486,6 +486,8 @@ QWidget *MainWindow::createCalibrationPanel()
     auto *setHomeButton = new QPushButton(QStringLiteral("设置当前位置为零点"), box);
     auto *saveButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("保存配置"), box);
     m_oneClickCalibrateButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("一键校准"), box);
+    m_stopOneClickCalibrateButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("结束一键校准"), box);
+    m_stopOneClickCalibrateButton->setEnabled(false);
     m_calibrationOutputEdit = new QPlainTextEdit(box);
     m_calibrationOutputEdit->setReadOnly(true);
     m_calibrationOutputEdit->setMinimumHeight(220);
@@ -501,6 +503,7 @@ QWidget *MainWindow::createCalibrationPanel()
     connect(setHomeButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(11); });
     connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19); });
     connect(m_oneClickCalibrateButton, &QPushButton::clicked, this, &MainWindow::startOneClickCalibration);
+    connect(m_stopOneClickCalibrateButton, &QPushButton::clicked, this, &MainWindow::stopOneClickCalibrationProcess);
 
     layout->addWidget(startButton, 0, 0);
     layout->addWidget(abortButton, 0, 1);
@@ -511,6 +514,7 @@ QWidget *MainWindow::createCalibrationPanel()
     layout->addWidget(setHomeButton, 2, 0);
     layout->addWidget(saveButton, 2, 1);
     layout->addWidget(m_oneClickCalibrateButton, 3, 0);
+    layout->addWidget(m_stopOneClickCalibrateButton, 3, 1);
     layout->addWidget(m_calibrationOutputEdit, 4, 0, 1, 4);
     layout->setColumnStretch(3, 1);
     layout->setRowStretch(4, 1);
@@ -994,6 +998,9 @@ void MainWindow::startOneClickCalibration()
     if (m_oneClickCalibrateButton) {
         m_oneClickCalibrateButton->setEnabled(false);
     }
+    if (m_stopOneClickCalibrateButton) {
+        m_stopOneClickCalibrateButton->setEnabled(true);
+    }
 
     auto *thread = new QThread(this);
     auto *runner = new CalibrationRunner(command);
@@ -1010,6 +1017,7 @@ void MainWindow::startOneClickCalibration()
             m_calibrationRunner = nullptr;
         }
     });
+    connect(runner, &CalibrationRunner::stopRequested, runner, &CalibrationRunner::stop, Qt::QueuedConnection);
     connect(runner, &CalibrationRunner::outputReady, this, &MainWindow::appendCalibrationOutput, Qt::QueuedConnection);
     connect(runner, &CalibrationRunner::finished, this, &MainWindow::finishOneClickCalibration, Qt::QueuedConnection);
     connect(runner, &CalibrationRunner::finished, thread, &QThread::quit, Qt::QueuedConnection);
@@ -1109,6 +1117,9 @@ void MainWindow::finishOneClickCalibration(const QString &message)
     if (m_oneClickCalibrateButton) {
         m_oneClickCalibrateButton->setEnabled(true);
     }
+    if (m_stopOneClickCalibrateButton) {
+        m_stopOneClickCalibrateButton->setEnabled(false);
+    }
 }
 
 void MainWindow::stopOneClickCalibrationProcess()
@@ -1117,12 +1128,22 @@ void MainWindow::stopOneClickCalibrationProcess()
         m_calibrationRunning = false;
         m_calibrationRunner = nullptr;
         m_calibrationThread = nullptr;
+        if (m_oneClickCalibrateButton) {
+            m_oneClickCalibrateButton->setEnabled(true);
+        }
+        if (m_stopOneClickCalibrateButton) {
+            m_stopOneClickCalibrateButton->setEnabled(false);
+        }
         return;
     }
 
     CalibrationRunner *runner = m_calibrationRunner.data();
     if (runner) {
-        QMetaObject::invokeMethod(runner, "stop", Qt::BlockingQueuedConnection);
+        emit runner->stopRequested();
+        if (m_stopOneClickCalibrateButton) {
+            m_stopOneClickCalibrateButton->setEnabled(false);
+        }
+        return;
     }
 
     m_calibrationThread->quit();
@@ -1130,6 +1151,12 @@ void MainWindow::stopOneClickCalibrationProcess()
     m_calibrationRunning = false;
     m_calibrationRunner = nullptr;
     m_calibrationThread = nullptr;
+    if (m_oneClickCalibrateButton) {
+        m_oneClickCalibrateButton->setEnabled(true);
+    }
+    if (m_stopOneClickCalibrateButton) {
+        m_stopOneClickCalibrateButton->setEnabled(false);
+    }
 }
 
 bool MainWindow::buildCommandPayload(const CommandDef &command, QByteArray *payload, QString *error) const

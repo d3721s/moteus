@@ -86,6 +86,7 @@ private:
     QTableWidget *m_configTable = nullptr;
     QTableWidget *m_logTable = nullptr;
     QPushButton *m_oneClickCalibrateButton = nullptr;
+    QPushButton *m_stopOneClickCalibrateButton = nullptr;
     QPlainTextEdit *m_calibrationOutputEdit = nullptr;
     QThread *m_calibrationThread = nullptr;
     QPointer<CalibrationRunner> m_calibrationRunner;
