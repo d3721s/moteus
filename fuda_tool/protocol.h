@@ -12,7 +12,7 @@ enum class PayloadKind
     HexBytes,
     ConfigRead,
     ConfigWrite,
-    OptionalUInt16x9
+    OptionalUInt16x8
 };
 
 enum class ConfigValueType

@@ -37,7 +37,9 @@
 namespace
 {
 constexpr int LogRowLimit = 2000;
-constexpr int Value1PartCount = 9;
+constexpr int Value1PartCount = 8;
+constexpr int Value1SpeedIndex = 0;
+constexpr int Value1PositionIndex = 1;
 constexpr int Value1IqCurrentIndex = 7;
 constexpr int CommandActionColumnWidth = 96;
 constexpr int ConfigActionColumnWidth = 86;
@@ -113,8 +115,12 @@ QStringList value1PartNames()
             QStringLiteral("status"),
             QStringLiteral("errors"),
             QStringLiteral("板载NTC"),
-            QStringLiteral("Iq电流"),
-            QStringLiteral("VALUE_1_9")};
+            QStringLiteral("Iq电流")};
+}
+
+bool isSignedValue1Part(int index)
+{
+    return index == Value1SpeedIndex || index == Value1PositionIndex || index == Value1IqCurrentIndex;
 }
 
 QString value1PartText(const QByteArray &payload, int index)
@@ -123,7 +129,7 @@ QString value1PartText(const QByteArray &payload, int index)
     if (!PayloadCodec::decodeUInt16(payload, index * 2, &rawValue)) {
         return QStringLiteral("-");
     }
-    if (index == Value1IqCurrentIndex) {
+    if (isSignedValue1Part(index)) {
         return QString::number(static_cast<qint16>(rawValue));
     }
     return QString::number(rawValue);
@@ -370,7 +376,7 @@ QWidget *MainWindow::createCommandPanel()
                 input->setText(QStringLiteral("00 00 00 00 00 00 00 00"));
             }
             break;
-        case PayloadKind::OptionalUInt16x9:
+        case PayloadKind::OptionalUInt16x8:
             input->clear();
             break;
         }
@@ -1297,7 +1303,7 @@ bool MainWindow::buildCommandPayload(const CommandDef &command, QByteArray *payl
         out += valuePayload;
         break;
     }
-    case PayloadKind::OptionalUInt16x9:
+    case PayloadKind::OptionalUInt16x8:
         if (!PayloadCodec::parseUInt16List(text, Value1PartCount, &out, error)) {
             return false;
         }
