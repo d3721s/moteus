@@ -9,12 +9,12 @@
 #include <QPointer>
 #include <QVector>
 
+class CalibrationRunner;
 class CanService;
 class QLabel;
 class QLineEdit;
 class QPushButton;
 class QPlainTextEdit;
-class QProcess;
 class QSpinBox;
 class QTableWidget;
 class QTableWidgetItem;
@@ -53,7 +53,6 @@ private:
     void sendConfigWrite(quint32 index);
     void startOneClickCalibration();
     void appendCalibrationOutput(const QString &text);
-    void flushCalibrationOutput();
     void finishOneClickCalibration(const QString &message);
     void stopOneClickCalibrationProcess();
     bool buildCommandPayload(const CommandDef &command, QByteArray *payload, QString *error) const;
@@ -89,11 +88,9 @@ private:
     QPushButton *m_oneClickCalibrateButton = nullptr;
     QPlainTextEdit *m_calibrationOutputEdit = nullptr;
     QThread *m_calibrationThread = nullptr;
-    QPointer<QProcess> m_calibrationProcess;
-    QString m_pendingCalibrationOutput;
+    QPointer<CalibrationRunner> m_calibrationRunner;
     QString m_calibrationCurrentLine;
     bool m_calibrationRunning = false;
-    bool m_calibrationOutputFlushScheduled = false;
     bool m_calibrationLiveLineVisible = false;
 
     QLabel *m_lastNodeLabel = nullptr;

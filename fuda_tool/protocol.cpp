@@ -10,7 +10,6 @@ CommandDef cmd(quint8 id,
                const QString &parameterHint,
                const QString &description,
                bool txAllowed,
-               bool expectsReply,
                bool reportOnly = false)
 {
     return CommandDef{id,
@@ -21,7 +20,6 @@ CommandDef cmd(quint8 id,
                       parameterHint,
                       description,
                       txAllowed,
-                      expectsReply,
                       reportOnly};
 }
 
@@ -35,61 +33,61 @@ const QVector<CommandDef> &Protocol::commandDefinitions()
 {
     static const QVector<CommandDef> commands = {
         cmd(0, QStringLiteral("CAN_CMD_MOTOR_DISABLE"), QStringLiteral("电机使能关闭"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true),
         cmd(1, QStringLiteral("CAN_CMD_MOTOR_ENABLE"), QStringLiteral("电机使能"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true),
         cmd(2, QStringLiteral("CAN_CMD_SET_TORQUE"), QStringLiteral("设置转矩给定"), QStringLiteral("4"),
-            PayloadKind::Float32, QStringLiteral("float: 转矩 Nm"), QStringLiteral("无回复"), true, false),
+            PayloadKind::Float32, QStringLiteral("float: 转矩 Nm"), QStringLiteral("无回复"), true),
         cmd(3, QStringLiteral("CAN_CMD_SET_VELOCITY"), QStringLiteral("设置速度给定"), QStringLiteral("4"),
-            PayloadKind::Float32, QStringLiteral("float: 速度 turn/s"), QStringLiteral("无回复"), true, false),
+            PayloadKind::Float32, QStringLiteral("float: 速度 turn/s"), QStringLiteral("无回复"), true),
         cmd(4, QStringLiteral("CAN_CMD_SET_POSITION"), QStringLiteral("设置位置给定"), QStringLiteral("4"),
-            PayloadKind::Float32, QStringLiteral("float: 位置 turn"), QStringLiteral("无回复"), true, false),
+            PayloadKind::Float32, QStringLiteral("float: 位置 turn"), QStringLiteral("无回复"), true),
         cmd(5, QStringLiteral("CAN_CMD_CALIB_START"), QStringLiteral("启动校准"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true),
         cmd(6, QStringLiteral("CAN_CMD_CALIB_REPORT"), QStringLiteral("校准过程上报"), QStringLiteral("8"),
-            PayloadKind::None, QStringLiteral("设备主动上报"), QStringLiteral("int32 step + 4 字节 data"), false, false, true),
+            PayloadKind::None, QStringLiteral("设备主动上报"), QStringLiteral("int32 step + 4 字节 data"), false, true),
         cmd(7, QStringLiteral("CAN_CMD_CALIB_ABORT"), QStringLiteral("中止校准"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true),
         cmd(8, QStringLiteral("CAN_CMD_ANTICOGGING_START"), QStringLiteral("启动齿槽补偿"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true),
         cmd(9, QStringLiteral("CAN_CMD_ANTICOGGING_REPORT"), QStringLiteral("齿槽补偿过程上报"), QStringLiteral("8"),
-            PayloadKind::None, QStringLiteral("设备主动上报"), QStringLiteral("int32 step + int32 value"), false, false, true),
+            PayloadKind::None, QStringLiteral("设备主动上报"), QStringLiteral("int32 step + int32 value"), false, true),
         cmd(10, QStringLiteral("CAN_CMD_ANTICOGGING_ABORT"), QStringLiteral("中止齿槽补偿"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true),
         cmd(11, QStringLiteral("CAN_CMD_SET_HOME"), QStringLiteral("设当前位置为机械零点"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true),
         cmd(12, QStringLiteral("CAN_CMD_ERROR_RESET"), QStringLiteral("清除错误"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true),
         cmd(13, QStringLiteral("CAN_CMD_GET_STATUSWORD"), QStringLiteral("查询状态字"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("回复 uint32 status + uint32 errors"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("回复 uint32 status + uint32 errors"), true),
         cmd(14, QStringLiteral("CAN_CMD_STATUSWORD_REPORT"), QStringLiteral("状态字上报"), QStringLiteral("8"),
-            PayloadKind::None, QStringLiteral("设备主动上报"), QStringLiteral("uint32 status + uint32 errors"), false, false, true),
+            PayloadKind::None, QStringLiteral("设备主动上报"), QStringLiteral("uint32 status + uint32 errors"), false, true),
         cmd(15, QStringLiteral("CAN_CMD_GET_VALUE_1"), QStringLiteral("查询变量 1"), QStringLiteral("18"),
-            PayloadKind::OptionalUInt16x9, QStringLiteral("留空；或 9 个 uint16"), QStringLiteral("速度、位置、hall 偏移、hall 值、状态、错误、板载 NTC、Iq 电流、VALUE_1_9"), true, true),
+            PayloadKind::OptionalUInt16x9, QStringLiteral("留空；或 9 个 uint16"), QStringLiteral("速度、位置、hall 偏移、hall 值、状态、错误、板载 NTC、Iq 电流、VALUE_1_9"), true),
         cmd(16, QStringLiteral("CAN_CMD_GET_VALUE_2"), QStringLiteral("查询变量 2"), QStringLiteral("预留"),
-            PayloadKind::HexBytes, QStringLiteral("预留；十六进制字节"), QStringLiteral("预留命令"), true, false),
+            PayloadKind::HexBytes, QStringLiteral("预留；十六进制字节"), QStringLiteral("预留命令"), true),
         cmd(17, QStringLiteral("CAN_CMD_SET_CONFIG"), QStringLiteral("写单个配置项"), QStringLiteral("8"),
-            PayloadKind::ConfigWrite, QStringLiteral("index,value"), QStringLiteral("建议使用下方配置表；回复同 GET_CONFIG 格式"), true, true),
+            PayloadKind::ConfigWrite, QStringLiteral("index,value"), QStringLiteral("建议使用下方配置表；回复同 GET_CONFIG 格式"), true),
         cmd(18, QStringLiteral("CAN_CMD_GET_CONFIG"), QStringLiteral("读单个配置项"), QStringLiteral("4"),
-            PayloadKind::ConfigRead, QStringLiteral("index"), QStringLiteral("回复 index + 当前值"), true, true),
+            PayloadKind::ConfigRead, QStringLiteral("index"), QStringLiteral("回复 index + 当前值"), true),
         cmd(19, QStringLiteral("CAN_CMD_SAVE_ALL_CONFIG"), QStringLiteral("保存全部配置到 Flash"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true),
         cmd(20, QStringLiteral("CAN_CMD_RESET_ALL_CONFIG"), QStringLiteral("恢复出厂配置"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("仅失能下有效；设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("仅失能下有效；设备回复 int32 返回值，0 成功"), true),
         cmd(21, QStringLiteral("CAN_CMD_SYNC"), QStringLiteral("同步触发"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("触发一次目标同步"), true, false),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("触发一次目标同步"), true),
         cmd(22, QStringLiteral("CAN_CMD_HEARTBEAT"), QStringLiteral("心跳"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备周期发送或主机保活"), true, false),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备周期发送或主机保活"), true),
         cmd(27, QStringLiteral("CAN_CMD_START_AUTO"), QStringLiteral("VALUE_1 自动推送"), QStringLiteral("1"),
-            PayloadKind::UInt8, QStringLiteral("uint8: 1 开启，0 关闭"), QStringLiteral("设备回显收到的值；开启后间隔 1 ms 推送"), true, true),
+            PayloadKind::UInt8, QStringLiteral("uint8: 1 开启，0 关闭"), QStringLiteral("设备回显收到的值；开启后间隔 1 ms 推送"), true),
         cmd(28, QStringLiteral("CAN_CMD_GET_FW_VERSION"), QStringLiteral("查询固件版本"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("回复 uint32 主版本 + uint32 次版本"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("回复 uint32 主版本 + uint32 次版本"), true),
         cmd(29, QStringLiteral("CAN_CMD_DFU_START"), QStringLiteral("DFU 升级开始"), QStringLiteral("0"),
-            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("设备回复 int32 返回值，0 成功"), true),
         cmd(30, QStringLiteral("CAN_CMD_DFU_DATA"), QStringLiteral("DFU 数据包"), QStringLiteral("1~8"),
-            PayloadKind::HexBytes, QStringLiteral("1~8 个十六进制字节"), QStringLiteral("设备回复 int32 返回值，0 成功"), true, true),
+            PayloadKind::HexBytes, QStringLiteral("1~8 个十六进制字节"), QStringLiteral("设备回复 int32 返回值，0 成功"), true),
         cmd(31, QStringLiteral("CAN_CMD_DFU_END"), QStringLiteral("DFU 升级结束"), QStringLiteral("8"),
-            PayloadKind::HexBytes, QStringLiteral("8 个十六进制字节"), QStringLiteral("校验通过后设备重启进 Bootloader"), true, true),
+            PayloadKind::HexBytes, QStringLiteral("8 个十六进制字节"), QStringLiteral("校验通过后设备重启进 Bootloader"), true),
     };
     return commands;
 }
@@ -175,27 +173,6 @@ QString Protocol::configTypeName(ConfigValueType type)
         return QStringLiteral("int32");
     case ConfigValueType::Float32:
         return QStringLiteral("float");
-    }
-    return QStringLiteral("unknown");
-}
-
-QString Protocol::payloadKindHint(PayloadKind kind)
-{
-    switch (kind) {
-    case PayloadKind::None:
-        return QStringLiteral("无参数");
-    case PayloadKind::Float32:
-        return QStringLiteral("float");
-    case PayloadKind::UInt8:
-        return QStringLiteral("uint8");
-    case PayloadKind::HexBytes:
-        return QStringLiteral("hex bytes");
-    case PayloadKind::ConfigRead:
-        return QStringLiteral("index");
-    case PayloadKind::ConfigWrite:
-        return QStringLiteral("index,value");
-    case PayloadKind::OptionalUInt16x9:
-        return QStringLiteral("9*uint16 或留空");
     }
     return QStringLiteral("unknown");
 }

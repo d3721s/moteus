@@ -31,7 +31,6 @@ struct CommandDef
     QString parameterHint;
     QString description;
     bool txAllowed = true;
-    bool expectsReply = false;
     bool reportOnly = false;
 };
 
@@ -53,7 +52,6 @@ const ConfigDef *configByIndex(quint32 index);
 
 QString commandName(quint8 id);
 QString configTypeName(ConfigValueType type);
-QString payloadKindHint(PayloadKind kind);
 }
 
 #endif // PROTOCOL_H

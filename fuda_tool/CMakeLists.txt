@@ -1,12 +1,14 @@
 cmake_minimum_required(VERSION 3.19)
 project(fuda_tool LANGUAGES CXX)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets SerialBus LinguistTools)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets SerialBus)
 
 qt_standard_project_setup()
 
 qt_add_executable(fuda_tool
     WIN32 MACOSX_BUNDLE
+    calibrationrunner.cpp
+    calibrationrunner.h
     canidcodec.cpp
     canidcodec.h
     canservice.cpp

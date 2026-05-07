@@ -20,7 +20,6 @@ public slots:
 
 private:
     bool isConnected() const;
-    QString interfaceName() const;
 
 signals:
     void connectionChanged(bool connected, const QString &message);

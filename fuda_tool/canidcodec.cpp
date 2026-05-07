@@ -1,19 +1,22 @@
 #include "canidcodec.h"
 
+namespace
+{
+bool isValidStandardId(quint32 frameId)
+{
+    return frameId <= 0x7FF;
+}
+}
+
 quint16 CanIdCodec::makeRequestId(quint8 nodeId, quint8 commandId)
 {
     return makeId(false, nodeId, commandId);
 }
 
-quint16 CanIdCodec::makeReplyId(quint8 nodeId, quint8 commandId)
-{
-    return makeId(true, nodeId, commandId);
-}
-
 DecodedCanId CanIdCodec::decode(quint32 frameId)
 {
     DecodedCanId result;
-    result.valid = isValidStandardId(frameId);
+    result.valid = ::isValidStandardId(frameId);
     if (!result.valid) {
         return result;
     }
@@ -22,11 +25,6 @@ DecodedCanId CanIdCodec::decode(quint32 frameId)
     result.nodeId = static_cast<quint8>((frameId & NodeMask) >> 5);
     result.commandId = static_cast<quint8>(frameId & CommandMask);
     return result;
-}
-
-bool CanIdCodec::isValidStandardId(quint32 frameId)
-{
-    return frameId <= 0x7FF;
 }
 
 quint16 CanIdCodec::makeId(bool isReply, quint8 nodeId, quint8 commandId)

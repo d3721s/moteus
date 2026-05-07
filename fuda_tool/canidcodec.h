@@ -20,9 +20,7 @@ public:
     static constexpr quint8 BroadcastNodeId = 31;
 
     static quint16 makeRequestId(quint8 nodeId, quint8 commandId);
-    static quint16 makeReplyId(quint8 nodeId, quint8 commandId);
     static DecodedCanId decode(quint32 frameId);
-    static bool isValidStandardId(quint32 frameId);
 
 private:
     static quint16 makeId(bool isReply, quint8 nodeId, quint8 commandId);

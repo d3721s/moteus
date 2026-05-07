@@ -20,11 +20,6 @@ bool CanService::isConnected() const
     return m_device && m_device->state() == QCanBusDevice::ConnectedState;
 }
 
-QString CanService::interfaceName() const
-{
-    return m_interfaceName;
-}
-
 void CanService::connectInterface(const QString &interfaceName, int bitrate, int dataBitrate)
 {
     clearDevice();
