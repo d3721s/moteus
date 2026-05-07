@@ -239,6 +239,7 @@ private:
     CAN_CMD_RESET_ALL_CONFIG = 20,
     CAN_CMD_SYNC = 21,
     CAN_CMD_HEARTBEAT = 22,
+    CAN_CMD_REPLY = 26,
     CAN_CMD_START_AUTO = 27,
     CAN_CMD_GET_FW_VERSION = 28,
     CAN_CMD_DFU_START = 29,
@@ -1442,6 +1443,7 @@ private:
     return true;
   }
   bool HandleHeartbeat(int dlc, const char *data) { return true; }
+  bool HandleReply(int dlc, const char *data) { return true; }
   bool HandleStartAuto(int dlc, const char *data) {
     auto_value_1_enabled_ = (data[0] == 1);
 
@@ -1488,7 +1490,7 @@ private:
       /* 23 reserved           */ {DlcNotUsed, nullptr},
       /* 24 reserved           */ {DlcNotUsed, nullptr},
       /* 25 reserved           */ {DlcNotUsed, nullptr},
-      /* 26 reserved           */ {DlcNotUsed, nullptr},
+      /* 26 REPLY              */ {DlcAny, &CustomProtocol::HandleReply},
       /* 27 START_AUTO         */ {1, &CustomProtocol::HandleStartAuto},
       /* 28 GET_FW_VERSION     */ {0, &CustomProtocol::HandleGetFwVersion},
       /* 29 DFU_START          */ {0, &CustomProtocol::HandleDfuStart},
