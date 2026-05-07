@@ -38,6 +38,7 @@ namespace
 {
 constexpr int LogRowLimit = 2000;
 constexpr int Value1PartCount = 9;
+constexpr int Value1IqCurrentIndex = 7;
 constexpr int CommandActionColumnWidth = 96;
 constexpr int ConfigActionColumnWidth = 86;
 constexpr int CalibrationOutputMaxBlockCount = 3000;
@@ -47,8 +48,8 @@ constexpr int LogIdColumnWidth = 72;
 constexpr int LogNodeColumnWidth = 52;
 constexpr int LogCommandColumnWidth = 150;
 constexpr int LogDlcColumnWidth = 48;
-constexpr int LogDataColumnWidth = 260;
-constexpr int LogParsedColumnWidth = 360;
+constexpr int LogDataColumnWidth = 520;
+constexpr int LogParsedColumnWidth = 720;
 
 QTableWidgetItem *readOnlyItem(const QString &text)
 {
@@ -114,6 +115,18 @@ QStringList value1PartNames()
             QStringLiteral("板载NTC"),
             QStringLiteral("Iq电流"),
             QStringLiteral("VALUE_1_9")};
+}
+
+QString value1PartText(const QByteArray &payload, int index)
+{
+    quint16 rawValue = 0;
+    if (!PayloadCodec::decodeUInt16(payload, index * 2, &rawValue)) {
+        return QStringLiteral("-");
+    }
+    if (index == Value1IqCurrentIndex) {
+        return QString::number(static_cast<qint16>(rawValue));
+    }
+    return QString::number(rawValue);
 }
 
 QLabel *valueLabel(const QString &text = QStringLiteral("-"))
@@ -1435,11 +1448,7 @@ QString MainWindow::describeFrame(const QCanBusFrame &frame, bool updateUi)
             const QStringList names = value1PartNames();
             QStringList parts;
             for (int i = 0; i < Value1PartCount; ++i) {
-                quint16 value = 0;
-                QString valueText = QStringLiteral("-");
-                if (PayloadCodec::decodeUInt16(payload, i * 2, &value)) {
-                    valueText = QString::number(value);
-                }
+                const QString valueText = value1PartText(payload, i);
                 parts << QStringLiteral("%1=%2").arg(names.at(i), valueText);
                 if (updateUi && i < m_value1Labels.size()) {
                     m_value1Labels.at(i)->setText(valueText);
