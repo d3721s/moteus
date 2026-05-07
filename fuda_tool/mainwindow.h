@@ -53,6 +53,12 @@ private:
     void applyVisualStyle();
     void shutdownWorkers();
     void shutdownCanThread();
+    bool confirmAction(const QString &windowTitle,
+                       const QString &message,
+                       const QString &detail,
+                       const QString &confirmText);
+    bool confirmProtocolCommand(const CommandDef &command, const QByteArray &payload);
+    bool confirmConfigWritePayload(const QByteArray &payload);
     bool confirmFactoryReset();
 
     void sendProtocolCommand(quint8 commandId);

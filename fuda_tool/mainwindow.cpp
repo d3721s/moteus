@@ -1011,10 +1011,6 @@ void MainWindow::sendProtocolCommand(quint8 commandId)
         return;
     }
 
-    if (commandId == 20 && !confirmFactoryReset()) {
-        return;
-    }
-
     QByteArray payload;
     QString error;
     if (!buildCommandPayload(*command, &payload, &error)) {
@@ -1031,13 +1027,20 @@ void MainWindow::sendProtocolCommand(quint8 commandId)
         return;
     }
 
+    if (!confirmProtocolCommand(*command, payload)) {
+        return;
+    }
+
     emit sendCanCommandRequested(currentNodeId(), commandId, payload);
 }
 
-bool MainWindow::confirmFactoryReset()
+bool MainWindow::confirmAction(const QString &windowTitle,
+                               const QString &message,
+                               const QString &detail,
+                               const QString &confirmText)
 {
     QDialog dialog(this);
-    dialog.setWindowTitle(QStringLiteral("确认恢复出厂配置"));
+    dialog.setWindowTitle(windowTitle);
     dialog.setModal(true);
     dialog.setMinimumSize(580, 190);
 
@@ -1057,12 +1060,12 @@ bool MainWindow::confirmFactoryReset()
     auto *textLayout = new QVBoxLayout();
     textLayout->setSpacing(8);
 
-    auto *messageLabel = new QLabel(QStringLiteral("该命令会恢复全部配置，且仅在失能下有效。"), &dialog);
+    auto *messageLabel = new QLabel(message, &dialog);
     messageLabel->setWordWrap(true);
     messageLabel->setMinimumWidth(460);
     textLayout->addWidget(messageLabel);
 
-    auto *detailLabel = new QLabel(QStringLiteral("确认发送恢复出厂配置命令？"), &dialog);
+    auto *detailLabel = new QLabel(detail, &dialog);
     detailLabel->setWordWrap(true);
     detailLabel->setMinimumWidth(460);
     textLayout->addWidget(detailLabel);
@@ -1075,7 +1078,7 @@ bool MainWindow::confirmFactoryReset()
     buttonLayout->setSpacing(12);
     buttonLayout->addStretch(1);
 
-    auto *confirmButton = new QPushButton(QStringLiteral("确认发送"), &dialog);
+    auto *confirmButton = new QPushButton(confirmText, &dialog);
     auto *cancelButton = new QPushButton(QStringLiteral("取消"), &dialog);
     confirmButton->setMinimumSize(168, 34);
     cancelButton->setMinimumSize(168, 34);
@@ -1111,6 +1114,107 @@ bool MainWindow::confirmFactoryReset()
     return dialog.exec() == QDialog::Accepted;
 }
 
+bool MainWindow::confirmProtocolCommand(const CommandDef &command, const QByteArray &payload)
+{
+    switch (command.id) {
+    case 5:
+        return confirmAction(QStringLiteral("确认启动校准"),
+                             QStringLiteral("该命令会启动电机校准流程，执行期间电机可能动作。"),
+                             QStringLiteral("确认发送启动校准命令？"),
+                             QStringLiteral("确认发送"));
+    case 7:
+        return confirmAction(QStringLiteral("确认中止校准"),
+                             QStringLiteral("该命令会中止当前电机校准流程。"),
+                             QStringLiteral("确认发送中止校准命令？"),
+                             QStringLiteral("确认发送"));
+    case 8:
+        return confirmAction(QStringLiteral("确认启动齿槽补偿"),
+                             QStringLiteral("该命令会启动齿槽补偿校准流程，执行期间电机可能动作。"),
+                             QStringLiteral("确认发送启动齿槽补偿命令？"),
+                             QStringLiteral("确认发送"));
+    case 10:
+        return confirmAction(QStringLiteral("确认中止齿槽补偿"),
+                             QStringLiteral("该命令会中止当前齿槽补偿校准流程。"),
+                             QStringLiteral("确认发送中止齿槽补偿命令？"),
+                             QStringLiteral("确认发送"));
+    case 11:
+        return confirmAction(QStringLiteral("确认设置机械零点"),
+                             QStringLiteral("该命令会将当前位置写入为机械零点。"),
+                             QStringLiteral("确认发送设置当前位置为机械零点命令？"),
+                             QStringLiteral("确认发送"));
+    case 12:
+        return confirmAction(QStringLiteral("确认清除错误"),
+                             QStringLiteral("该命令会清除设备当前错误状态。"),
+                             QStringLiteral("确认发送清除错误命令？"),
+                             QStringLiteral("确认发送"));
+    case 17:
+        return confirmConfigWritePayload(payload);
+    case 19:
+        return confirmAction(QStringLiteral("确认保存配置"),
+                             QStringLiteral("该命令会将当前全部配置保存到 Flash。"),
+                             QStringLiteral("确认发送保存全部配置命令？"),
+                             QStringLiteral("确认发送"));
+    case 20:
+        return confirmFactoryReset();
+    case 29:
+        return confirmAction(QStringLiteral("确认开始升级"),
+                             QStringLiteral("该命令会让设备进入 DFU 升级流程。"),
+                             QStringLiteral("确认发送 DFU 升级开始命令？"),
+                             QStringLiteral("确认发送"));
+    case 31:
+        return confirmAction(QStringLiteral("确认结束升级"),
+                             QStringLiteral("该命令会提交 DFU 校验数据，校验通过后设备会重启进 Bootloader。"),
+                             QStringLiteral("确认发送 DFU 升级结束命令？"),
+                             QStringLiteral("确认发送"));
+    default:
+        return true;
+    }
+}
+
+bool MainWindow::confirmConfigWritePayload(const QByteArray &payload)
+{
+    quint32 index = 0;
+    if (!PayloadCodec::decodeUInt32(payload, 0, &index)) {
+        return confirmAction(QStringLiteral("确认写入配置"),
+                             QStringLiteral("该操作会修改设备配置项。"),
+                             QStringLiteral("确认写入配置？"),
+                             QStringLiteral("确认写入"));
+    }
+
+    const ConfigDef *config = Protocol::configByIndex(index);
+    const QString target = config ? QStringLiteral("%1（索引 %2）").arg(config->name).arg(index)
+                                  : QStringLiteral("索引 %1").arg(index);
+
+    QString valueText;
+    if (config && config->type == ConfigValueType::Float32) {
+        float value = 0.0F;
+        if (PayloadCodec::decodeFloat(payload, 4, &value)) {
+            valueText = QString::number(value, 'g', 8);
+        }
+    } else {
+        qint32 value = 0;
+        if (PayloadCodec::decodeInt32(payload, 4, &value)) {
+            valueText = QString::number(value);
+        }
+    }
+    if (valueText.isEmpty()) {
+        valueText = PayloadCodec::bytesToHex(payload.mid(4));
+    }
+
+    return confirmAction(QStringLiteral("确认写入配置"),
+                         QStringLiteral("该操作会修改设备配置项。"),
+                         QStringLiteral("确认写入 %1，值为 %2？").arg(target, valueText),
+                         QStringLiteral("确认写入"));
+}
+
+bool MainWindow::confirmFactoryReset()
+{
+    return confirmAction(QStringLiteral("确认恢复出厂配置"),
+                         QStringLiteral("该命令会恢复全部配置，且仅在失能下有效。"),
+                         QStringLiteral("确认发送恢复出厂配置命令？"),
+                         QStringLiteral("确认发送"));
+}
+
 void MainWindow::sendRawProtocolCommand(quint8 commandId, const QByteArray &payload)
 {
     const CommandDef *command = Protocol::commandById(commandId);
@@ -1121,6 +1225,10 @@ void MainWindow::sendRawProtocolCommand(quint8 commandId, const QByteArray &payl
         QMessageBox::warning(this,
                              QStringLiteral("参数错误"),
                              QStringLiteral("payload 长度 %1 超过 CAN FD 64 字节限制").arg(payload.size()));
+        return;
+    }
+
+    if (!confirmProtocolCommand(*command, payload)) {
         return;
     }
 
@@ -1154,17 +1262,35 @@ void MainWindow::sendConfigWrite(quint32 index)
 
     QByteArray payload = PayloadCodec::encodeUInt32(index);
     payload += valuePayload;
+    if (!confirmConfigWritePayload(payload)) {
+        return;
+    }
+
     emit sendCanCommandRequested(currentNodeId(), 17, payload);
 }
 
 void MainWindow::startOneClickCalibration()
 {
+    if (!confirmAction(QStringLiteral("确认一键电机校准"),
+                       QStringLiteral("该操作会启动 moteus 工具执行完整电机校准流程。"),
+                       QStringLiteral("确认开始一键电机校准？"),
+                       QStringLiteral("确认开始"))) {
+        return;
+    }
+
     const QString command = QStringLiteral("MOTEUS_CAL_DIR=/tmp python3 -u -m moteus.moteus_tool --calibrate --cal-never-encoder-current-mode");
     startProcessPanel(&m_calibrationProcess, command);
 }
 
 void MainWindow::startOneClickAnticogging()
 {
+    if (!confirmAction(QStringLiteral("确认一键齿槽校准"),
+                       QStringLiteral("该操作会启动补偿脚本并写入齿槽补偿数据。"),
+                       QStringLiteral("确认开始一键齿槽校准？"),
+                       QStringLiteral("确认开始"))) {
+        return;
+    }
+
     const QString command = QStringLiteral("python3 -u compensate_cogging.py --store -v");
     startProcessPanel(&m_anticoggingProcess, command);
 }
@@ -1192,6 +1318,13 @@ void MainWindow::startOneClickDfuFlash()
 {
     if (m_selectedElfPath.trimmed().isEmpty()) {
         QMessageBox::warning(this, QStringLiteral("参数错误"), QStringLiteral("请先选择 ELF 文件"));
+        return;
+    }
+
+    if (!confirmAction(QStringLiteral("确认一键升级"),
+                       QStringLiteral("该操作会使用已选择的 ELF 文件执行完整远程升级流程。"),
+                       QStringLiteral("确认开始一键升级？"),
+                       QStringLiteral("确认开始"))) {
         return;
     }
 
