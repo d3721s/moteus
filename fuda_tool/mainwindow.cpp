@@ -9,9 +9,11 @@
 #include <QAbstractItemView>
 #include <QCloseEvent>
 #include <QDateTime>
+#include <QDialog>
 #include <QDoubleValidator>
 #include <QGridLayout>
 #include <QHeaderView>
+#include <QHBoxLayout>
 #include <QIntValidator>
 #include <QLabel>
 #include <QLineEdit>
@@ -31,7 +33,6 @@
 #include <QTabWidget>
 #include <QTextCursor>
 #include <QThread>
-#include <QTimer>
 #include <QVBoxLayout>
 
 #include <limits>
@@ -997,28 +998,49 @@ void MainWindow::sendProtocolCommand(quint8 commandId)
 
 bool MainWindow::confirmFactoryReset()
 {
-    QMessageBox box(this);
-    box.setWindowTitle(QStringLiteral("确认恢复出厂配置"));
-    box.setIcon(QMessageBox::Warning);
-    box.setText(QStringLiteral("该命令会恢复全部配置，且仅在失能下有效。"));
-    box.setInformativeText(QStringLiteral("确认发送恢复出厂配置命令？"));
-    box.setMinimumWidth(1080);
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("确认恢复出厂配置"));
+    dialog.setModal(true);
+    dialog.setMinimumSize(580, 190);
 
-    QPushButton *confirmButton = box.addButton(QStringLiteral("确认发送"), QMessageBox::AcceptRole);
-    QPushButton *cancelButton = box.addButton(QStringLiteral("取消"), QMessageBox::RejectRole);
-    confirmButton->setMinimumWidth(128);
-    cancelButton->setMinimumWidth(128);
-    box.setDefaultButton(cancelButton);
-    box.setEscapeButton(cancelButton);
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(24, 20, 24, 18);
+    layout->setSpacing(12);
 
-    QTimer::singleShot(0, &box, [this, &box]() {
-        const QPoint center = frameGeometry().center();
-        const QRect dialogGeometry = box.frameGeometry();
-        box.move(center.x() - dialogGeometry.width() / 2, center.y() - dialogGeometry.height() / 2);
-    });
+    auto *messageLabel = new QLabel(QStringLiteral("该命令会恢复全部配置，且仅在失能下有效。"), &dialog);
+    messageLabel->setWordWrap(true);
+    messageLabel->setMinimumWidth(520);
+    layout->addWidget(messageLabel);
 
-    box.exec();
-    return box.clickedButton() == confirmButton;
+    auto *detailLabel = new QLabel(QStringLiteral("确认发送恢复出厂配置命令？"), &dialog);
+    detailLabel->setWordWrap(true);
+    detailLabel->setMinimumWidth(520);
+    layout->addWidget(detailLabel);
+    layout->addStretch(1);
+
+    auto *buttonLayout = new QHBoxLayout();
+    buttonLayout->setSpacing(12);
+    buttonLayout->addStretch(1);
+
+    auto *confirmButton = new QPushButton(QStringLiteral("确认发送"), &dialog);
+    auto *cancelButton = new QPushButton(QStringLiteral("取消"), &dialog);
+    confirmButton->setMinimumSize(168, 34);
+    cancelButton->setMinimumSize(168, 34);
+    cancelButton->setDefault(true);
+
+    buttonLayout->addWidget(confirmButton);
+    buttonLayout->addWidget(cancelButton);
+    layout->addLayout(buttonLayout);
+
+    connect(confirmButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+    connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+
+    dialog.adjustSize();
+    dialog.resize(qMax(dialog.width(), 580), qMax(dialog.height(), 190));
+    const QPoint center = frameGeometry().center();
+    dialog.move(center.x() - dialog.width() / 2, center.y() - dialog.height() / 2);
+
+    return dialog.exec() == QDialog::Accepted;
 }
 
 void MainWindow::sendRawProtocolCommand(quint8 commandId, const QByteArray &payload)
