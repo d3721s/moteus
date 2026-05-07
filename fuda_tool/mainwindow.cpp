@@ -31,6 +31,7 @@
 #include <QTabWidget>
 #include <QTextCursor>
 #include <QThread>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <limits>
@@ -42,6 +43,8 @@ constexpr int LogRowLimit = 2000;
 constexpr int Value1PartCount = 9;
 constexpr int CommandActionColumnWidth = 96;
 constexpr int ConfigActionColumnWidth = 86;
+constexpr int CalibrationOutputFlushMs = 100;
+constexpr int CalibrationOutputMaxBlockCount = 3000;
 
 QTableWidgetItem *readOnlyItem(const QString &text)
 {
@@ -483,6 +486,7 @@ QWidget *MainWindow::createCalibrationPanel()
     m_calibrationOutputEdit->setReadOnly(true);
     m_calibrationOutputEdit->setMinimumHeight(220);
     m_calibrationOutputEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
+    m_calibrationOutputEdit->setMaximumBlockCount(CalibrationOutputMaxBlockCount);
 
     connect(startButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(5); });
     connect(abortButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(7); });
@@ -977,6 +981,8 @@ void MainWindow::startOneClickCalibration()
 
     const QString command = QStringLiteral("PYTHONUNBUFFERED=1 python3 -u -m moteus.moteus_tool --target 1 --calibrate --cal-never-encoder-current-mode");
     m_calibrationOutputEdit->clear();
+    m_pendingCalibrationOutput.clear();
+    m_calibrationOutputFlushScheduled = false;
     appendCalibrationOutput(QStringLiteral("执行命令：bash -lc \"%1\"\n\n").arg(command));
 
     m_calibrationRunning = true;
@@ -1001,27 +1007,51 @@ void MainWindow::startOneClickCalibration()
 
     connect(thread, &QThread::started, worker, [this, worker, thread, command]() {
         auto *process = new QProcess(worker);
+        auto *flushTimer = new QTimer(worker);
+        auto pendingOutput = std::make_shared<QString>();
         auto completed = std::make_shared<bool>(false);
         process->setProcessChannelMode(QProcess::SeparateChannels);
+        flushTimer->setInterval(CalibrationOutputFlushMs);
 
         QMetaObject::invokeMethod(this, [this, process]() {
             m_calibrationProcess = process;
         }, Qt::QueuedConnection);
 
-        auto appendOutput = [this](const QString &text) {
+        auto deliverOutput = [this](const QString &text) {
             QMetaObject::invokeMethod(this, [this, text]() {
                 appendCalibrationOutput(text);
             }, Qt::QueuedConnection);
         };
+        auto queueOutput = [pendingOutput, flushTimer](const QString &text) {
+            if (text.isEmpty()) {
+                return;
+            }
 
-        connect(process, &QProcess::readyReadStandardOutput, worker, [process, appendOutput]() {
-            appendOutput(QString::fromUtf8(process->readAllStandardOutput()));
+            pendingOutput->append(text);
+            if (!flushTimer->isActive()) {
+                flushTimer->start();
+            }
+        };
+
+        connect(flushTimer, &QTimer::timeout, worker, [pendingOutput, flushTimer, deliverOutput]() {
+            if (pendingOutput->isEmpty()) {
+                flushTimer->stop();
+                return;
+            }
+
+            QString text;
+            text.swap(*pendingOutput);
+            deliverOutput(text);
         });
-        connect(process, &QProcess::readyReadStandardError, worker, [process, appendOutput]() {
-            appendOutput(QString::fromUtf8(process->readAllStandardError()));
+
+        connect(process, &QProcess::readyReadStandardOutput, worker, [process, queueOutput]() {
+            queueOutput(QString::fromUtf8(process->readAllStandardOutput()));
         });
-        connect(process, &QProcess::errorOccurred, worker, [this, process, thread, completed, appendOutput](QProcess::ProcessError error) {
-            appendOutput(QStringLiteral("\n进程错误：%1\n").arg(process->errorString()));
+        connect(process, &QProcess::readyReadStandardError, worker, [process, queueOutput]() {
+            queueOutput(QString::fromUtf8(process->readAllStandardError()));
+        });
+        connect(process, &QProcess::errorOccurred, worker, [this, process, thread, completed, deliverOutput](QProcess::ProcessError error) {
+            deliverOutput(QStringLiteral("\n进程错误：%1\n").arg(process->errorString()));
             if (error == QProcess::FailedToStart && !*completed) {
                 *completed = true;
                 QMetaObject::invokeMethod(this, [this]() {
@@ -1034,14 +1064,17 @@ void MainWindow::startOneClickCalibration()
         connect(process,
                 QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                 worker,
-                [this, process, thread, completed](int exitCode, QProcess::ExitStatus exitStatus) {
+                [this, process, thread, pendingOutput, flushTimer, completed](int exitCode, QProcess::ExitStatus exitStatus) {
                     if (*completed) {
                         return;
                     }
                     *completed = true;
 
-                    const QString output = QString::fromUtf8(process->readAllStandardOutput())
+                    flushTimer->stop();
+                    const QString output = *pendingOutput
+                        + QString::fromUtf8(process->readAllStandardOutput())
                         + QString::fromUtf8(process->readAllStandardError());
+                    pendingOutput->clear();
                     const QString result = exitStatus == QProcess::NormalExit
                         ? QStringLiteral("\n进程结束，退出码：%1\n").arg(exitCode)
                         : QStringLiteral("\n进程异常结束\n");
@@ -1065,6 +1098,26 @@ void MainWindow::appendCalibrationOutput(const QString &text)
     if (!m_calibrationOutputEdit || text.isEmpty()) {
         return;
     }
+
+    m_pendingCalibrationOutput += text;
+    if (m_calibrationOutputFlushScheduled) {
+        return;
+    }
+
+    m_calibrationOutputFlushScheduled = true;
+    QTimer::singleShot(CalibrationOutputFlushMs, this, &MainWindow::flushCalibrationOutput);
+}
+
+void MainWindow::flushCalibrationOutput()
+{
+    m_calibrationOutputFlushScheduled = false;
+    if (!m_calibrationOutputEdit || m_pendingCalibrationOutput.isEmpty()) {
+        return;
+    }
+
+    QString text;
+    text.swap(m_pendingCalibrationOutput);
+    text.replace(QLatin1Char('\r'), QLatin1Char('\n'));
 
     m_calibrationOutputEdit->moveCursor(QTextCursor::End);
     m_calibrationOutputEdit->insertPlainText(text);
