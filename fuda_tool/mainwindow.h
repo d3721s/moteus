@@ -52,9 +52,9 @@ private:
     void sendConfigRead(quint32 index);
     void sendConfigWrite(quint32 index);
     void startOneClickCalibration();
-    void appendCalibrationOutput(const QString &text);
-    void finishOneClickCalibration(const QString &message);
+    void startOneClickAnticogging();
     void stopOneClickCalibrationProcess();
+    void stopOneClickAnticoggingProcess();
     bool buildCommandPayload(const CommandDef &command, QByteArray *payload, QString *error) const;
     bool encodeConfigValue(const ConfigDef &config, const QString &text, QByteArray *payload, QString *error) const;
 
@@ -72,6 +72,23 @@ private:
     quint8 currentNodeId() const;
     QString commandInputText(quint8 commandId) const;
 
+    struct ProcessPanel
+    {
+        QPushButton *startButton = nullptr;
+        QPushButton *stopButton = nullptr;
+        QPlainTextEdit *outputEdit = nullptr;
+        QThread *thread = nullptr;
+        QPointer<CalibrationRunner> runner;
+        QString currentLine;
+        bool running = false;
+        bool liveLineVisible = false;
+    };
+
+    void startProcessPanel(ProcessPanel *panel, const QString &command);
+    void stopProcessPanel(ProcessPanel *panel, bool waitForThread = false);
+    void appendProcessOutput(ProcessPanel *panel, const QString &text);
+    void finishProcessPanel(ProcessPanel *panel, const QString &message);
+
     QThread *m_canThread = nullptr;
     CanService *m_canService = nullptr;
     QWidget *m_canContentArea = nullptr;
@@ -85,14 +102,8 @@ private:
     QTableWidget *m_commandTable = nullptr;
     QTableWidget *m_configTable = nullptr;
     QTableWidget *m_logTable = nullptr;
-    QPushButton *m_oneClickCalibrateButton = nullptr;
-    QPushButton *m_stopOneClickCalibrateButton = nullptr;
-    QPlainTextEdit *m_calibrationOutputEdit = nullptr;
-    QThread *m_calibrationThread = nullptr;
-    QPointer<CalibrationRunner> m_calibrationRunner;
-    QString m_calibrationCurrentLine;
-    bool m_calibrationRunning = false;
-    bool m_calibrationLiveLineVisible = false;
+    ProcessPanel m_calibrationProcess;
+    ProcessPanel m_anticoggingProcess;
 
     QLabel *m_lastNodeLabel = nullptr;
     QLabel *m_lastCommandLabel = nullptr;

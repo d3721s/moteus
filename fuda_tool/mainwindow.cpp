@@ -217,7 +217,8 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    stopOneClickCalibrationProcess();
+    stopProcessPanel(&m_calibrationProcess, true);
+    stopProcessPanel(&m_anticoggingProcess, true);
 
     if (!m_canThread || !m_canThread->isRunning()) {
         return;
@@ -485,14 +486,14 @@ QWidget *MainWindow::createCalibrationPanel()
     auto *encoderOffsetButton = new QPushButton(QStringLiteral("读取编码器偏移"), box);
     auto *setHomeButton = new QPushButton(QStringLiteral("设置当前位置为零点"), box);
     auto *saveButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("保存配置"), box);
-    m_oneClickCalibrateButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("一键校准"), box);
-    m_stopOneClickCalibrateButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("结束一键校准"), box);
-    m_stopOneClickCalibrateButton->setEnabled(false);
-    m_calibrationOutputEdit = new QPlainTextEdit(box);
-    m_calibrationOutputEdit->setReadOnly(true);
-    m_calibrationOutputEdit->setMinimumHeight(220);
-    m_calibrationOutputEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
-    m_calibrationOutputEdit->setMaximumBlockCount(CalibrationOutputMaxBlockCount);
+    m_calibrationProcess.startButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("一键校准"), box);
+    m_calibrationProcess.stopButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("结束一键校准"), box);
+    m_calibrationProcess.stopButton->setEnabled(false);
+    m_calibrationProcess.outputEdit = new QPlainTextEdit(box);
+    m_calibrationProcess.outputEdit->setReadOnly(true);
+    m_calibrationProcess.outputEdit->setMinimumHeight(220);
+    m_calibrationProcess.outputEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
+    m_calibrationProcess.outputEdit->setMaximumBlockCount(CalibrationOutputMaxBlockCount);
 
     connect(startButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(5); });
     connect(abortButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(7); });
@@ -502,8 +503,8 @@ QWidget *MainWindow::createCalibrationPanel()
     connect(encoderOffsetButton, &QPushButton::clicked, this, [this]() { sendConfigRead(36); });
     connect(setHomeButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(11); });
     connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19); });
-    connect(m_oneClickCalibrateButton, &QPushButton::clicked, this, &MainWindow::startOneClickCalibration);
-    connect(m_stopOneClickCalibrateButton, &QPushButton::clicked, this, &MainWindow::stopOneClickCalibrationProcess);
+    connect(m_calibrationProcess.startButton, &QPushButton::clicked, this, &MainWindow::startOneClickCalibration);
+    connect(m_calibrationProcess.stopButton, &QPushButton::clicked, this, &MainWindow::stopOneClickCalibrationProcess);
 
     layout->addWidget(startButton, 0, 0);
     layout->addWidget(abortButton, 0, 1);
@@ -513,9 +514,9 @@ QWidget *MainWindow::createCalibrationPanel()
     layout->addWidget(encoderOffsetButton, 1, 2);
     layout->addWidget(setHomeButton, 2, 0);
     layout->addWidget(saveButton, 2, 1);
-    layout->addWidget(m_oneClickCalibrateButton, 3, 0);
-    layout->addWidget(m_stopOneClickCalibrateButton, 3, 1);
-    layout->addWidget(m_calibrationOutputEdit, 4, 0, 1, 4);
+    layout->addWidget(m_calibrationProcess.startButton, 3, 0);
+    layout->addWidget(m_calibrationProcess.stopButton, 3, 1);
+    layout->addWidget(m_calibrationProcess.outputEdit, 4, 0, 1, 4);
     layout->setColumnStretch(3, 1);
     layout->setRowStretch(4, 1);
     return box;
@@ -537,6 +538,14 @@ QWidget *MainWindow::createAnticoggingPanel()
     auto *readEnableButton = new QPushButton(QStringLiteral("读取启用状态"), box);
     auto *readLutButton = new QPushButton(QStringLiteral("读取补偿表"), box);
     auto *saveButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("保存配置"), box);
+    m_anticoggingProcess.startButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("一键齿槽校准"), box);
+    m_anticoggingProcess.stopButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("结束齿槽校准"), box);
+    m_anticoggingProcess.stopButton->setEnabled(false);
+    m_anticoggingProcess.outputEdit = new QPlainTextEdit(box);
+    m_anticoggingProcess.outputEdit->setReadOnly(true);
+    m_anticoggingProcess.outputEdit->setMinimumHeight(220);
+    m_anticoggingProcess.outputEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
+    m_anticoggingProcess.outputEdit->setMaximumBlockCount(CalibrationOutputMaxBlockCount);
 
     connect(startButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(8); });
     connect(abortButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(10); });
@@ -550,6 +559,8 @@ QWidget *MainWindow::createAnticoggingPanel()
     connect(readEnableButton, &QPushButton::clicked, this, [this]() { sendConfigRead(16); });
     connect(readLutButton, &QPushButton::clicked, this, [this]() { sendConfigRead(37); });
     connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19); });
+    connect(m_anticoggingProcess.startButton, &QPushButton::clicked, this, &MainWindow::startOneClickAnticogging);
+    connect(m_anticoggingProcess.stopButton, &QPushButton::clicked, this, &MainWindow::stopOneClickAnticoggingProcess);
 
     layout->addWidget(startButton, 0, 0);
     layout->addWidget(abortButton, 0, 1);
@@ -559,8 +570,11 @@ QWidget *MainWindow::createAnticoggingPanel()
     layout->addWidget(readEnableButton, 1, 2);
     layout->addWidget(readLutButton, 2, 0);
     layout->addWidget(saveButton, 2, 1);
+    layout->addWidget(m_anticoggingProcess.startButton, 3, 0);
+    layout->addWidget(m_anticoggingProcess.stopButton, 3, 1);
+    layout->addWidget(m_anticoggingProcess.outputEdit, 4, 0, 1, 4);
     layout->setColumnStretch(3, 1);
-    layout->setRowStretch(3, 1);
+    layout->setRowStretch(4, 1);
     return box;
 }
 
@@ -980,54 +994,68 @@ void MainWindow::sendConfigWrite(quint32 index)
 
 void MainWindow::startOneClickCalibration()
 {
-    if (!m_calibrationOutputEdit) {
+    const QString command = QStringLiteral("PYTHONUNBUFFERED=1 python3 -u -m moteus.moteus_tool --target 1 --calibrate --verbose --cal-never-encoder-current-mode");
+    startProcessPanel(&m_calibrationProcess, command);
+}
+
+void MainWindow::startOneClickAnticogging()
+{
+    const QString command = QStringLiteral("PYTHONUNBUFFERED=1 python3 -u compensate_cogging.py --target 1 --store -v");
+    startProcessPanel(&m_anticoggingProcess, command);
+}
+
+void MainWindow::startProcessPanel(ProcessPanel *panel, const QString &command)
+{
+    if (!panel || !panel->outputEdit) {
         return;
     }
-    if (m_calibrationRunning) {
-        appendCalibrationOutput(QStringLiteral("\n校准进程正在运行。\n"));
+    if (panel->running) {
+        appendProcessOutput(panel, QStringLiteral("\n进程正在运行。\n"));
         return;
     }
 
-    const QString command = QStringLiteral("PYTHONUNBUFFERED=1 python3 -u -m moteus.moteus_tool --target 1 --calibrate --cal-never-encoder-current-mode");
-    m_calibrationOutputEdit->clear();
-    m_calibrationCurrentLine.clear();
-    m_calibrationLiveLineVisible = false;
-    // appendCalibrationOutput(QStringLiteral("执行命令：bash -lc \"%1\"\n\n").arg(command));
+    panel->outputEdit->clear();
+    panel->currentLine.clear();
+    panel->liveLineVisible = false;
+    appendProcessOutput(panel, QStringLiteral("执行命令：bash -lc \"%1\"\n\n").arg(command));
 
-    m_calibrationRunning = true;
-    if (m_oneClickCalibrateButton) {
-        m_oneClickCalibrateButton->setEnabled(false);
+    panel->running = true;
+    if (panel->startButton) {
+        panel->startButton->setEnabled(false);
     }
-    if (m_stopOneClickCalibrateButton) {
-        m_stopOneClickCalibrateButton->setEnabled(true);
+    if (panel->stopButton) {
+        panel->stopButton->setEnabled(true);
     }
 
     auto *thread = new QThread(this);
     auto *runner = new CalibrationRunner(command);
     runner->moveToThread(thread);
-    m_calibrationThread = thread;
-    m_calibrationRunner = runner;
+    panel->thread = thread;
+    panel->runner = runner;
 
     connect(thread, &QThread::started, runner, &CalibrationRunner::start);
     connect(thread, &QThread::finished, runner, &QObject::deleteLater);
     connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-    connect(thread, &QThread::finished, this, [this, thread]() {
-        if (m_calibrationThread == thread) {
-            m_calibrationThread = nullptr;
-            m_calibrationRunner = nullptr;
+    connect(thread, &QThread::finished, this, [panel, thread]() {
+        if (panel->thread == thread) {
+            panel->thread = nullptr;
+            panel->runner = nullptr;
         }
     });
-    connect(runner, &CalibrationRunner::stopRequested, runner, &CalibrationRunner::stop, Qt::QueuedConnection);
-    connect(runner, &CalibrationRunner::outputReady, this, &MainWindow::appendCalibrationOutput, Qt::QueuedConnection);
-    connect(runner, &CalibrationRunner::finished, this, &MainWindow::finishOneClickCalibration, Qt::QueuedConnection);
+    connect(runner, &CalibrationRunner::outputReady, this, [this, panel](const QString &text) {
+        appendProcessOutput(panel, text);
+    }, Qt::QueuedConnection);
+    connect(runner, &CalibrationRunner::finished, this, [this, panel](const QString &message) {
+        finishProcessPanel(panel, message);
+    }, Qt::QueuedConnection);
     connect(runner, &CalibrationRunner::finished, thread, &QThread::quit, Qt::QueuedConnection);
 
     thread->start();
 }
 
-void MainWindow::appendCalibrationOutput(const QString &text)
+void MainWindow::appendProcessOutput(ProcessPanel *panel, const QString &text)
 {
-    if (!m_calibrationOutputEdit || text.isEmpty()) {
+    if (!panel || !panel->outputEdit || text.isEmpty()) {
         return;
     }
 
@@ -1045,28 +1073,28 @@ void MainWindow::appendCalibrationOutput(const QString &text)
             continue;
         }
         if (ch == QLatin1Char('\r') && i + 1 < text.size() && text.at(i + 1) == QLatin1Char('\n')) {
-            committedText += m_calibrationCurrentLine;
+            committedText += panel->currentLine;
             committedText += QLatin1Char('\n');
-            m_calibrationCurrentLine.clear();
+            panel->currentLine.clear();
             liveLineDirty = true;
             ++i;
             continue;
         }
         if (ch == QLatin1Char('\r')) {
-            m_calibrationCurrentLine.clear();
+            panel->currentLine.clear();
             liveLineDirty = true;
             continue;
         }
         if (ch == QLatin1Char('\n')) {
-            committedText += m_calibrationCurrentLine;
+            committedText += panel->currentLine;
             committedText += QLatin1Char('\n');
-            m_calibrationCurrentLine.clear();
+            panel->currentLine.clear();
             liveLineDirty = true;
             continue;
         }
         if (ch == QLatin1Char('\b')) {
-            if (!m_calibrationCurrentLine.isEmpty()) {
-                m_calibrationCurrentLine.chop(1);
+            if (!panel->currentLine.isEmpty()) {
+                panel->currentLine.chop(1);
                 liveLineDirty = true;
             }
             continue;
@@ -1075,87 +1103,104 @@ void MainWindow::appendCalibrationOutput(const QString &text)
             continue;
         }
 
-        m_calibrationCurrentLine += ch;
+        panel->currentLine += ch;
         liveLineDirty = true;
     }
 
-    m_calibrationOutputEdit->moveCursor(QTextCursor::End);
-    QTextCursor cursor = m_calibrationOutputEdit->textCursor();
+    panel->outputEdit->moveCursor(QTextCursor::End);
+    QTextCursor cursor = panel->outputEdit->textCursor();
     cursor.movePosition(QTextCursor::End);
 
     if (!committedText.isEmpty()) {
-        if (m_calibrationLiveLineVisible) {
+        if (panel->liveLineVisible) {
             cursor.select(QTextCursor::BlockUnderCursor);
             cursor.removeSelectedText();
-            m_calibrationLiveLineVisible = false;
+            panel->liveLineVisible = false;
         }
         cursor.insertText(committedText);
     }
 
     if (liveLineDirty) {
-        if (m_calibrationLiveLineVisible) {
+        if (panel->liveLineVisible) {
             cursor.select(QTextCursor::BlockUnderCursor);
             cursor.removeSelectedText();
         }
-        if (!m_calibrationCurrentLine.isEmpty()) {
-            cursor.insertText(m_calibrationCurrentLine);
-            m_calibrationLiveLineVisible = true;
+        if (!panel->currentLine.isEmpty()) {
+            cursor.insertText(panel->currentLine);
+            panel->liveLineVisible = true;
         } else {
-            m_calibrationLiveLineVisible = false;
+            panel->liveLineVisible = false;
         }
     }
 
-    m_calibrationOutputEdit->setTextCursor(cursor);
-    m_calibrationOutputEdit->moveCursor(QTextCursor::End);
-}
-
-void MainWindow::finishOneClickCalibration(const QString &message)
-{
-    appendCalibrationOutput(message);
-    m_calibrationRunning = false;
-    m_calibrationRunner = nullptr;
-    if (m_oneClickCalibrateButton) {
-        m_oneClickCalibrateButton->setEnabled(true);
-    }
-    if (m_stopOneClickCalibrateButton) {
-        m_stopOneClickCalibrateButton->setEnabled(false);
-    }
+    panel->outputEdit->setTextCursor(cursor);
+    panel->outputEdit->moveCursor(QTextCursor::End);
 }
 
 void MainWindow::stopOneClickCalibrationProcess()
 {
-    if (!m_calibrationThread || !m_calibrationThread->isRunning()) {
-        m_calibrationRunning = false;
-        m_calibrationRunner = nullptr;
-        m_calibrationThread = nullptr;
-        if (m_oneClickCalibrateButton) {
-            m_oneClickCalibrateButton->setEnabled(true);
-        }
-        if (m_stopOneClickCalibrateButton) {
-            m_stopOneClickCalibrateButton->setEnabled(false);
+    stopProcessPanel(&m_calibrationProcess);
+}
+
+void MainWindow::stopOneClickAnticoggingProcess()
+{
+    stopProcessPanel(&m_anticoggingProcess);
+}
+
+void MainWindow::stopProcessPanel(ProcessPanel *panel, bool waitForThread)
+{
+    if (!panel || !panel->thread || !panel->thread->isRunning()) {
+        if (panel) {
+            panel->running = false;
+            panel->runner = nullptr;
+            panel->thread = nullptr;
+            if (panel->startButton) {
+                panel->startButton->setEnabled(true);
+            }
+            if (panel->stopButton) {
+                panel->stopButton->setEnabled(false);
+            }
         }
         return;
     }
 
-    CalibrationRunner *runner = m_calibrationRunner.data();
+    CalibrationRunner *runner = panel->runner.data();
     if (runner) {
-        emit runner->stopRequested();
-        if (m_stopOneClickCalibrateButton) {
-            m_stopOneClickCalibrateButton->setEnabled(false);
+        QMetaObject::invokeMethod(runner, "stop", waitForThread ? Qt::BlockingQueuedConnection : Qt::QueuedConnection);
+        if (panel->stopButton) {
+            panel->stopButton->setEnabled(false);
         }
-        return;
+        if (!waitForThread) {
+            return;
+        }
     }
 
-    m_calibrationThread->quit();
-    m_calibrationThread->wait(3000);
-    m_calibrationRunning = false;
-    m_calibrationRunner = nullptr;
-    m_calibrationThread = nullptr;
-    if (m_oneClickCalibrateButton) {
-        m_oneClickCalibrateButton->setEnabled(true);
+    panel->thread->quit();
+    panel->thread->wait(3000);
+    panel->running = false;
+    panel->runner = nullptr;
+    panel->thread = nullptr;
+    if (panel->startButton) {
+        panel->startButton->setEnabled(true);
     }
-    if (m_stopOneClickCalibrateButton) {
-        m_stopOneClickCalibrateButton->setEnabled(false);
+    if (panel->stopButton) {
+        panel->stopButton->setEnabled(false);
+    }
+}
+
+void MainWindow::finishProcessPanel(ProcessPanel *panel, const QString &message)
+{
+    if (!panel) {
+        return;
+    }
+    appendProcessOutput(panel, message);
+    panel->running = false;
+    panel->runner = nullptr;
+    if (panel->startButton) {
+        panel->startButton->setEnabled(true);
+    }
+    if (panel->stopButton) {
+        panel->stopButton->setEnabled(false);
     }
 }
 

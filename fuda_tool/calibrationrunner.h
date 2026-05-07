@@ -21,7 +21,6 @@ public slots:
 signals:
     void outputReady(const QString &text);
     void finished(const QString &message);
-    void stopRequested();
 
 private:
     void queueOutput(const QString &text);
