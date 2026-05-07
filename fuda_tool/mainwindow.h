@@ -12,6 +12,8 @@ class CanService;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QPlainTextEdit;
+class QProcess;
 class QSpinBox;
 class QTableWidget;
 class QTableWidgetItem;
@@ -48,6 +50,8 @@ private:
     void sendRawProtocolCommand(quint8 commandId, const QByteArray &payload);
     void sendConfigRead(quint32 index);
     void sendConfigWrite(quint32 index);
+    void startOneClickCalibration();
+    void appendCalibrationOutput(const QString &text);
     bool buildCommandPayload(const CommandDef &command, QByteArray *payload, QString *error) const;
     bool encodeConfigValue(const ConfigDef &config, const QString &text, QByteArray *payload, QString *error) const;
 
@@ -78,6 +82,9 @@ private:
     QTableWidget *m_commandTable = nullptr;
     QTableWidget *m_configTable = nullptr;
     QTableWidget *m_logTable = nullptr;
+    QPushButton *m_oneClickCalibrateButton = nullptr;
+    QPlainTextEdit *m_calibrationOutputEdit = nullptr;
+    QProcess *m_calibrationProcess = nullptr;
 
     QLabel *m_lastNodeLabel = nullptr;
     QLabel *m_lastCommandLabel = nullptr;
