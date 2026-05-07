@@ -1047,7 +1047,7 @@ void MainWindow::sendConfigWrite(quint32 index)
 
 void MainWindow::startOneClickCalibration()
 {
-    const QString command = QStringLiteral("python3 -u -m moteus.moteus_tool --target 1 --calibrate --verbose --cal-never-encoder-current-mode");
+    const QString command = QStringLiteral("python3 -u -m moteus.moteus_tool --target 1 --calibrate --cal-never-encoder-current-mode --cal-write-raw my_cal_data.bin");
     startProcessPanel(&m_calibrationProcess, command);
 }
 
