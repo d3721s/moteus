@@ -992,7 +992,7 @@ void MainWindow::startOneClickCalibration()
     m_calibrationOutputEdit->clear();
     m_calibrationCurrentLine.clear();
     m_calibrationLiveLineVisible = false;
-    appendCalibrationOutput(QStringLiteral("执行命令：bash -lc \"%1\"\n\n").arg(command));
+    // appendCalibrationOutput(QStringLiteral("执行命令：bash -lc \"%1\"\n\n").arg(command));
 
     m_calibrationRunning = true;
     if (m_oneClickCalibrateButton) {
