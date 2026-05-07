@@ -609,6 +609,7 @@ QWidget *MainWindow::createAnticoggingPanel()
     auto *readEnableButton = new QPushButton(QStringLiteral("读取启用状态"), box);
     auto *readLutButton = new QPushButton(QStringLiteral("读取补偿表"), box);
     auto *saveButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("保存配置"), box);
+    auto *selectCalibFileButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogOpenButton), QStringLiteral("选择校准文件"), box);
     m_anticoggingProcess.startButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("一键齿槽校准"), box);
     m_anticoggingProcess.stopButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("终止齿槽校准"), box);
     m_anticoggingProcess.stopButton->setEnabled(false);
@@ -630,6 +631,7 @@ QWidget *MainWindow::createAnticoggingPanel()
     connect(readEnableButton, &QPushButton::clicked, this, [this]() { sendConfigRead(16); });
     connect(readLutButton, &QPushButton::clicked, this, [this]() { sendConfigRead(37); });
     connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19, false); });
+    connect(selectCalibFileButton, &QPushButton::clicked, this, &MainWindow::chooseAnticoggingFile);
     connect(m_anticoggingProcess.startButton, &QPushButton::clicked, this, &MainWindow::startOneClickAnticogging);
     connect(m_anticoggingProcess.stopButton, &QPushButton::clicked, this, &MainWindow::stopOneClickAnticoggingProcess);
 
@@ -641,8 +643,9 @@ QWidget *MainWindow::createAnticoggingPanel()
     layout->addWidget(readEnableButton, 1, 2);
     layout->addWidget(readLutButton, 2, 0);
     layout->addWidget(saveButton, 2, 1);
-    layout->addWidget(m_anticoggingProcess.startButton, 3, 0);
-    layout->addWidget(m_anticoggingProcess.stopButton, 3, 1);
+    layout->addWidget(selectCalibFileButton, 3, 0);
+    layout->addWidget(m_anticoggingProcess.startButton, 3, 1);
+    layout->addWidget(m_anticoggingProcess.stopButton, 3, 2);
     layout->addWidget(m_anticoggingProcess.outputEdit, 4, 0, 1, 4);
     layout->setColumnStretch(3, 1);
     layout->setRowStretch(4, 1);
@@ -1283,8 +1286,36 @@ void MainWindow::startOneClickCalibration()
     startProcessPanel(&m_calibrationProcess, command);
 }
 
+void MainWindow::chooseAnticoggingFile()
+{
+    const QString path = QFileDialog::getOpenFileName(this,
+                                                      QStringLiteral("选择校准文件"),
+                                                      QString(),
+                                                      QStringLiteral("Python 文件 (*.py)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    if (!path.endsWith(QStringLiteral(".py"), Qt::CaseInsensitive)) {
+        QMessageBox::warning(this, QStringLiteral("参数错误"), QStringLiteral("请选择 .py 后缀的校准文件"));
+        return;
+    }
+
+    m_selectedAnticoggingScriptPath = path;
+    if (m_anticoggingProcess.outputEdit) {
+        m_anticoggingProcess.outputEdit->clear();
+        m_anticoggingProcess.currentLine.clear();
+        m_anticoggingProcess.liveLineVisible = false;
+        appendProcessOutput(&m_anticoggingProcess, QStringLiteral("已选择校准文件：%1\n").arg(path));
+    }
+}
+
 void MainWindow::startOneClickAnticogging()
 {
+    if (m_selectedAnticoggingScriptPath.trimmed().isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("参数错误"), QStringLiteral("请先选择校准文件"));
+        return;
+    }
+
     if (!confirmAction(QStringLiteral("确认一键齿槽校准"),
                        QStringLiteral("该操作会启动补偿脚本并写入齿槽补偿数据。"),
                        QStringLiteral("确认开始一键齿槽校准？"),
@@ -1292,7 +1323,9 @@ void MainWindow::startOneClickAnticogging()
         return;
     }
 
-    const QString command = QStringLiteral("python3 -u compensate_cogging.py --store -v");
+    const QString command = QStringLiteral("python3 -m %1 --target %2 --average-count 4 --split-count 16 --store")
+                                .arg(shellQuote(m_selectedAnticoggingScriptPath))
+                                .arg(currentNodeId());
     startProcessPanel(&m_anticoggingProcess, command);
 }
 
