@@ -51,6 +51,8 @@ constexpr int LogIdColumnWidth = 72;
 constexpr int LogNodeColumnWidth = 52;
 constexpr int LogCommandColumnWidth = 150;
 constexpr int LogDlcColumnWidth = 48;
+constexpr int LogDataColumnWidth = 260;
+constexpr int LogParsedColumnWidth = 360;
 
 QTableWidgetItem *readOnlyItem(const QString &text)
 {
@@ -717,20 +719,15 @@ QWidget *MainWindow::createLogPanel()
     m_logTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_logTable->setWordWrap(false);
     m_logTable->horizontalHeader()->setStretchLastSection(false);
-    m_logTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-    m_logTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
-    m_logTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
-    m_logTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
-    m_logTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
-    m_logTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Fixed);
-    m_logTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Stretch);
-    m_logTable->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Stretch);
+    m_logTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed);
     m_logTable->setColumnWidth(0, LogTimeColumnWidth);
     m_logTable->setColumnWidth(1, LogDirectionColumnWidth);
     m_logTable->setColumnWidth(2, LogIdColumnWidth);
     m_logTable->setColumnWidth(3, LogNodeColumnWidth);
     m_logTable->setColumnWidth(4, LogCommandColumnWidth);
     m_logTable->setColumnWidth(5, LogDlcColumnWidth);
+    m_logTable->setColumnWidth(6, LogDataColumnWidth);
+    m_logTable->setColumnWidth(7, LogParsedColumnWidth);
     m_logTable->verticalHeader()->setDefaultSectionSize(25);
 
     layout->addWidget(m_logTable);
@@ -1578,7 +1575,7 @@ void MainWindow::addLogFrame(const QString &direction, const QCanBusFrame &frame
     m_logTable->setItem(row, 6, readOnlyItem(PayloadCodec::bytesToHex(frame.payload())));
     m_logTable->setItem(row, 7, readOnlyItem(parsed));
     if (followTail) {
-        m_logTable->scrollToBottom();
+        m_logTable->verticalScrollBar()->setValue(m_logTable->verticalScrollBar()->maximum());
     }
 }
 
@@ -1605,7 +1602,7 @@ void MainWindow::appendSystemLog(const QString &message)
     m_logTable->setItem(row, 6, readOnlyItem(QStringLiteral("-")));
     m_logTable->setItem(row, 7, readOnlyItem(message));
     if (followTail) {
-        m_logTable->scrollToBottom();
+        m_logTable->verticalScrollBar()->setValue(m_logTable->verticalScrollBar()->maximum());
     }
 }
 
