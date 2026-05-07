@@ -66,6 +66,7 @@ private:
     void sendConfigRead(quint32 index);
     void sendConfigWrite(quint32 index);
     void startOneClickCalibration();
+    void chooseAnticoggingFile();
     void startOneClickAnticogging();
     void chooseElfFile();
     void startOneClickDfuFlash();
@@ -123,6 +124,7 @@ private:
     ProcessPanel m_anticoggingProcess;
     ProcessPanel m_dfuProcess;
     QCheckBox *m_bootloaderActiveCheck = nullptr;
+    QString m_selectedAnticoggingScriptPath;
     QString m_selectedElfPath;
     bool m_shuttingDown = false;
 
