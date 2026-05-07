@@ -61,7 +61,10 @@ public:
         fuda_config_ != nullptr && fuda_config_->can_baudrate > 0
             ? fuda_config_->can_baudrate
             : (fdcan_ != nullptr ? fdcan_->fast_bitrate() : 0);
-    config_.heartbeat_consumer_ms = 0;
+    config_.heartbeat_consumer_ms =
+        fuda_config_ != nullptr && fuda_config_->heartbeat_consumer_ms > 0
+            ? fuda_config_->heartbeat_consumer_ms
+            : 0;
     config_.heartbeat_producer_ms =
         fuda_config_ != nullptr && fuda_config_->heartbeat_producer_ms > 0
             ? fuda_config_->heartbeat_producer_ms
@@ -136,6 +139,9 @@ public:
     if (ms_since_last_send_ < std::numeric_limits<uint32_t>::max()) {
       ms_since_last_send_++;
     }
+    if (ms_since_last_receive_ < std::numeric_limits<uint32_t>::max()) {
+      ms_since_last_receive_++;
+    }
 
     if (bldc_servo_ != nullptr) {
       const auto *position_config = bldc_servo_->motor_position_config();
@@ -151,6 +157,7 @@ public:
     }
 
     PollStatuswordReport();
+    PollHeartbeatConsumer();
 
     if (!auto_value_1_enabled_) {
       PollHeartbeatProducer();
@@ -427,6 +434,26 @@ private:
               0, nullptr);
   }
 
+  void PollHeartbeatConsumer() {
+    if (bldc_servo_ == nullptr || config_.heartbeat_consumer_ms <= 0 ||
+        heartbeat_consumer_timed_out_) {
+      return;
+    }
+
+    const uint32_t consumer_ms =
+        static_cast<uint32_t>(config_.heartbeat_consumer_ms);
+    if (ms_since_last_receive_ < consumer_ms) {
+      return;
+    }
+
+    if (bldc_servo_->status().mode != BldcServo::Mode::kStopped) {
+      BldcServo::CommandData command;
+      command.mode = BldcServo::Mode::kStopped;
+      bldc_servo_->Command(command);
+    }
+    heartbeat_consumer_timed_out_ = true;
+  }
+
   void PollStatuswordReport() {
     if (bldc_servo_ == nullptr) {
       return;
@@ -634,6 +661,15 @@ private:
         fuda_config_->position_filter_bw = config_.position_filter_bw;
       }
     }
+    if (index == CONFIG_HEARTBEAT_CONSUMER_MS &&
+        config_.heartbeat_consumer_ms >= 0) {
+      ms_since_last_receive_ = 0;
+      heartbeat_consumer_timed_out_ = false;
+      if (fuda_config_ != nullptr) {
+        fuda_config_->heartbeat_consumer_ms =
+            config_.heartbeat_consumer_ms;
+      }
+    }
     if (index == CONFIG_HEARTBEAT_PRODUCER_MS &&
         config_.heartbeat_producer_ms >= 0) {
       if (fuda_config_ != nullptr) {
@@ -773,9 +809,13 @@ private:
       }
       break;
     }
-    case CONFIG_HEARTBEAT_CONSUMER_MS:
+    case CONFIG_HEARTBEAT_CONSUMER_MS: {
       config_.heartbeat_consumer_ms = ToInt32(raw_value);
+      if (config_.heartbeat_consumer_ms < 0) {
+        return false;
+      }
       break;
+    }
     case CONFIG_HEARTBEAT_PRODUCER_MS: {
       config_.heartbeat_producer_ms = ToInt32(raw_value);
       if (config_.heartbeat_producer_ms < 0) {
@@ -959,6 +999,8 @@ private:
     if (entry.expected_dlc >= 0 && dlc != entry.expected_dlc) {
       return false;
     }
+    ms_since_last_receive_ = 0;
+    heartbeat_consumer_timed_out_ = false;
     debug_led_canfd = 1;
 
     (this->*(entry.handler))(dlc, data);
@@ -1470,6 +1512,8 @@ private:
   bool statusword_report_initialized_ = false;
   bool auto_value_1_enabled_ = false;
   uint32_t ms_since_last_send_ = 0;
+  uint32_t ms_since_last_receive_ = 0;
+  bool heartbeat_consumer_timed_out_ = false;
 
   // 速度                bldc_servo_->status().velocity
   // 位置                bldc_servo_->status().position
