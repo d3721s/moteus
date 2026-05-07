@@ -542,7 +542,7 @@ QWidget *MainWindow::createCalibrationPanel()
     auto *setHomeButton = new QPushButton(QStringLiteral("设置当前位置为零点"), box);
     auto *saveButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("保存配置"), box);
     m_calibrationProcess.startButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("一键电机校准"), box);
-    m_calibrationProcess.stopButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("结束电机校准"), box);
+    m_calibrationProcess.stopButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("终止电机校准"), box);
     m_calibrationProcess.stopButton->setEnabled(false);
     m_calibrationProcess.outputEdit = new QPlainTextEdit(box);
     m_calibrationProcess.outputEdit->setReadOnly(true);
@@ -585,8 +585,8 @@ QWidget *MainWindow::createAnticoggingPanel()
     layout->setHorizontalSpacing(8);
     layout->setVerticalSpacing(8);
 
-    auto *startButton = new QPushButton(style()->standardIcon(QStyle::SP_MediaPlay), QStringLiteral("启动补偿"), box);
-    auto *abortButton = new QPushButton(style()->standardIcon(QStyle::SP_MediaStop), QStringLiteral("中止补偿"), box);
+    auto *startButton = new QPushButton(style()->standardIcon(QStyle::SP_MediaPlay), QStringLiteral("启动补偿校准"), box);
+    auto *abortButton = new QPushButton(style()->standardIcon(QStyle::SP_MediaStop), QStringLiteral("中止补偿校准"), box);
     auto *statusButton = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QStringLiteral("读取状态"), box);
     auto *enableButton = new QPushButton(QStringLiteral("启用补偿"), box);
     auto *disableButton = new QPushButton(QStringLiteral("关闭补偿"), box);
@@ -594,7 +594,7 @@ QWidget *MainWindow::createAnticoggingPanel()
     auto *readLutButton = new QPushButton(QStringLiteral("读取补偿表"), box);
     auto *saveButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("保存配置"), box);
     m_anticoggingProcess.startButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("一键齿槽校准"), box);
-    m_anticoggingProcess.stopButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("结束齿槽校准"), box);
+    m_anticoggingProcess.stopButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("终止齿槽校准"), box);
     m_anticoggingProcess.stopButton->setEnabled(false);
     m_anticoggingProcess.outputEdit = new QPlainTextEdit(box);
     m_anticoggingProcess.outputEdit->setReadOnly(true);
