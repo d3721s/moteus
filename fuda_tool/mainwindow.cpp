@@ -982,7 +982,9 @@ void MainWindow::startOneClickCalibration()
     const QString command = QStringLiteral("PYTHONUNBUFFERED=1 python3 -u -m moteus.moteus_tool --target 1 --calibrate --cal-never-encoder-current-mode");
     m_calibrationOutputEdit->clear();
     m_pendingCalibrationOutput.clear();
+    m_calibrationCurrentLine.clear();
     m_calibrationOutputFlushScheduled = false;
+    m_calibrationLiveLineVisible = false;
     appendCalibrationOutput(QStringLiteral("执行命令：bash -lc \"%1\"\n\n").arg(command));
 
     m_calibrationRunning = true;
@@ -1115,12 +1117,84 @@ void MainWindow::flushCalibrationOutput()
         return;
     }
 
-    QString text;
-    text.swap(m_pendingCalibrationOutput);
-    text.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+    QString raw;
+    raw.swap(m_pendingCalibrationOutput);
+
+    QString committedText;
+    bool liveLineDirty = false;
+    for (int i = 0; i < raw.size(); ++i) {
+        const QChar ch = raw.at(i);
+        if (ch == QLatin1Char('\x1B')) {
+            if (i + 1 < raw.size() && raw.at(i + 1) == QLatin1Char('[')) {
+                i += 2;
+                while (i < raw.size() && (raw.at(i).unicode() < 0x40 || raw.at(i).unicode() > 0x7E)) {
+                    ++i;
+                }
+            }
+            continue;
+        }
+        if (ch == QLatin1Char('\r') && i + 1 < raw.size() && raw.at(i + 1) == QLatin1Char('\n')) {
+            committedText += m_calibrationCurrentLine;
+            committedText += QLatin1Char('\n');
+            m_calibrationCurrentLine.clear();
+            liveLineDirty = true;
+            ++i;
+            continue;
+        }
+        if (ch == QLatin1Char('\r')) {
+            m_calibrationCurrentLine.clear();
+            liveLineDirty = true;
+            continue;
+        }
+        if (ch == QLatin1Char('\n')) {
+            committedText += m_calibrationCurrentLine;
+            committedText += QLatin1Char('\n');
+            m_calibrationCurrentLine.clear();
+            liveLineDirty = true;
+            continue;
+        }
+        if (ch == QLatin1Char('\b')) {
+            if (!m_calibrationCurrentLine.isEmpty()) {
+                m_calibrationCurrentLine.chop(1);
+                liveLineDirty = true;
+            }
+            continue;
+        }
+        if (ch.unicode() < 0x20 && ch != QLatin1Char('\t')) {
+            continue;
+        }
+
+        m_calibrationCurrentLine += ch;
+        liveLineDirty = true;
+    }
 
     m_calibrationOutputEdit->moveCursor(QTextCursor::End);
-    m_calibrationOutputEdit->insertPlainText(text);
+    QTextCursor cursor = m_calibrationOutputEdit->textCursor();
+    cursor.movePosition(QTextCursor::End);
+
+    if (!committedText.isEmpty()) {
+        if (m_calibrationLiveLineVisible) {
+            cursor.select(QTextCursor::BlockUnderCursor);
+            cursor.removeSelectedText();
+            m_calibrationLiveLineVisible = false;
+        }
+        cursor.insertText(committedText);
+    }
+
+    if (liveLineDirty) {
+        if (m_calibrationLiveLineVisible) {
+            cursor.select(QTextCursor::BlockUnderCursor);
+            cursor.removeSelectedText();
+        }
+        if (!m_calibrationCurrentLine.isEmpty()) {
+            cursor.insertText(m_calibrationCurrentLine);
+            m_calibrationLiveLineVisible = true;
+        } else {
+            m_calibrationLiveLineVisible = false;
+        }
+    }
+
+    m_calibrationOutputEdit->setTextCursor(cursor);
     m_calibrationOutputEdit->moveCursor(QTextCursor::End);
 }
 

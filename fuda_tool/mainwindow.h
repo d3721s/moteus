@@ -91,8 +91,10 @@ private:
     QThread *m_calibrationThread = nullptr;
     QPointer<QProcess> m_calibrationProcess;
     QString m_pendingCalibrationOutput;
+    QString m_calibrationCurrentLine;
     bool m_calibrationRunning = false;
     bool m_calibrationOutputFlushScheduled = false;
+    bool m_calibrationLiveLineVisible = false;
 
     QLabel *m_lastNodeLabel = nullptr;
     QLabel *m_lastCommandLabel = nullptr;
