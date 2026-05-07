@@ -68,13 +68,6 @@ public:
     config_.calib_valid = 0;
     config_.offset_lut = 0;
 
-    if (fuda_config_ != nullptr && fuda_config_->protect_under_voltage > 0.0f &&
-        bldc_servo_->config().min_voltage == 4.0f) {
-      auto &servo_config =
-          const_cast<BldcServo::Config &>(bldc_servo_->config());
-      servo_config.min_voltage = fuda_config_->protect_under_voltage;
-    }
-
     SyncConfigFromServo();
   }
 
@@ -634,12 +627,6 @@ private:
     if (index == CONFIG_POSITION_FILTER_BW) {
       if (fuda_config_ != nullptr) {
         fuda_config_->position_filter_bw = config_.position_filter_bw;
-      }
-    }
-    if (index == CONFIG_PROTECT_UNDER_VOLTAGE) {
-      if (fuda_config_ != nullptr) {
-        fuda_config_->protect_under_voltage =
-            config_.protect_under_voltage;
       }
     }
     if (index == CONFIG_HEARTBEAT_PRODUCER_MS &&
