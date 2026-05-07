@@ -57,6 +57,7 @@ constexpr int LogCommandColumnWidth = 150;
 constexpr int LogDlcColumnWidth = 48;
 constexpr int LogDataColumnWidth = 640;
 constexpr int LogParsedColumnWidth = 1080;
+constexpr bool DebugAllowControlsWhenDisconnected = true;
 
 QTableWidgetItem *readOnlyItem(const QString &text)
 {
@@ -1946,7 +1947,7 @@ void MainWindow::setFlagLabel(QLabel *label, bool active)
 void MainWindow::setConnectionState(bool connected, const QString &message)
 {
     if (m_canContentArea) {
-        m_canContentArea->setEnabled(connected);
+        m_canContentArea->setEnabled(connected || DebugAllowControlsWhenDisconnected);
     }
     m_connectionStateLabel->setText(message);
     m_connectionStateLabel->setStyleSheet(connected ? QStringLiteral("background: #DDE8D6; color: #1F4D1F; border: 1px solid #7F9A7F; border-radius: 0;")
