@@ -8,7 +8,6 @@
 #include <QAbstractItemView>
 #include <QDateTime>
 #include <QDoubleValidator>
-#include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHeaderView>
@@ -36,6 +35,7 @@
 namespace
 {
 constexpr int LogRowLimit = 2000;
+constexpr int Value1PartCount = 9;
 
 QTableWidgetItem *readOnlyItem(const QString &text)
 {
@@ -88,6 +88,19 @@ bool isReturnCodeCommand(quint8 commandId)
 QStringList splitArguments(const QString &text)
 {
     return text.trimmed().split(QRegularExpression(QStringLiteral("[\\s,;]+")), Qt::SkipEmptyParts);
+}
+
+QStringList value1PartNames()
+{
+    return {QStringLiteral("速度"),
+            QStringLiteral("位置"),
+            QStringLiteral("hall偏移"),
+            QStringLiteral("hall值"),
+            QStringLiteral("status"),
+            QStringLiteral("errors"),
+            QStringLiteral("板载NTC"),
+            QStringLiteral("Iq电流"),
+            QStringLiteral("VALUE_1_9")};
 }
 
 QLabel *valueLabel(const QString &text = QStringLiteral("-"))
@@ -158,12 +171,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     workSplitter->addWidget(tabs);
     QWidget *statusPanel = createStatusPanel();
-    statusPanel->setMaximumWidth(220);
-    statusPanel->setMinimumWidth(190);
+    statusPanel->setMaximumWidth(560);
+    statusPanel->setMinimumWidth(440);
     workSplitter->addWidget(statusPanel);
-    workSplitter->setStretchFactor(0, 8);
-    workSplitter->setStretchFactor(1, 1);
-    workSplitter->setSizes({1090, 210});
+    workSplitter->setStretchFactor(0, 6);
+    workSplitter->setStretchFactor(1, 2);
+    workSplitter->setSizes({820, 500});
 
     verticalSplitter->addWidget(workSplitter);
     verticalSplitter->addWidget(createLogPanel());
@@ -318,7 +331,7 @@ QWidget *MainWindow::createCommandPanel()
                 input->setText(QStringLiteral("00 00 00 00 00 00 00 00"));
             }
             break;
-        case PayloadKind::OptionalUInt16x8:
+        case PayloadKind::OptionalUInt16x9:
             input->clear();
             break;
         }
@@ -574,10 +587,20 @@ QWidget *MainWindow::createStatusPanel()
 {
     const TitledPanel panel = createTitledPanel(QStringLiteral("实时状态"), this);
     auto *box = panel.body;
-    auto *layout = new QFormLayout(box);
+    auto *layout = new QGridLayout(box);
     layout->setContentsMargins(10, 8, 10, 10);
-    layout->setSpacing(6);
-    layout->setLabelAlignment(Qt::AlignRight);
+    layout->setHorizontalSpacing(10);
+    layout->setVerticalSpacing(6);
+    layout->setColumnStretch(1, 1);
+    layout->setColumnStretch(3, 1);
+
+    auto addStatusItem = [box, layout](int row, int group, const QString &name, QLabel *value) {
+        const int column = group * 2;
+        auto *nameLabel = new QLabel(name, box);
+        nameLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        layout->addWidget(nameLabel, row, column);
+        layout->addWidget(value, row, column + 1);
+    };
 
     m_lastNodeLabel = valueLabel();
     m_lastCommandLabel = valueLabel();
@@ -594,26 +617,33 @@ QWidget *MainWindow::createStatusPanel()
     m_fwVersionLabel = valueLabel();
     m_calibLabel = valueLabel();
     m_anticoggingLabel = valueLabel();
-    m_value1Label = valueLabel();
-    m_value1Label->setWordWrap(true);
-    m_value1Label->setMinimumWidth(260);
+    m_value1Labels.clear();
+    m_value1Labels.reserve(Value1PartCount);
+    for (int i = 0; i < Value1PartCount; ++i) {
+        m_value1Labels.append(valueLabel());
+    }
 
-    layout->addRow(QStringLiteral("最近节点"), m_lastNodeLabel);
-    layout->addRow(QStringLiteral("最近命令"), m_lastCommandLabel);
-    layout->addRow(QStringLiteral("status_code"), m_statusWordLabel);
-    layout->addRow(QStringLiteral("switched_on"), m_switchedOnLabel);
-    layout->addRow(QStringLiteral("target_reached"), m_targetReachedLabel);
-    layout->addRow(QStringLiteral("current_limit_active"), m_currentLimitLabel);
-    layout->addRow(QStringLiteral("errors_code"), m_errorsWordLabel);
-    layout->addRow(QStringLiteral("adc_selftest_fatal"), m_adcSelftestLabel);
-    layout->addRow(QStringLiteral("encoder_offline"), m_encoderOfflineLabel);
-    layout->addRow(QStringLiteral("over_voltage"), m_overVoltageLabel);
-    layout->addRow(QStringLiteral("under_voltage"), m_underVoltageLabel);
-    layout->addRow(QStringLiteral("over_current"), m_overCurrentLabel);
-    layout->addRow(QStringLiteral("固件版本"), m_fwVersionLabel);
-    layout->addRow(QStringLiteral("校准上报"), m_calibLabel);
-    layout->addRow(QStringLiteral("齿槽补偿"), m_anticoggingLabel);
-    layout->addRow(QStringLiteral("VALUE_1"), m_value1Label);
+    int statusRow = 0;
+    addStatusItem(statusRow++, 0, QStringLiteral("最近节点"), m_lastNodeLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("最近命令"), m_lastCommandLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("status_code"), m_statusWordLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("switched_on"), m_switchedOnLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("target_reached"), m_targetReachedLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("current_limit_active"), m_currentLimitLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("errors_code"), m_errorsWordLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("adc_selftest_fatal"), m_adcSelftestLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("encoder_offline"), m_encoderOfflineLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("over_voltage"), m_overVoltageLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("under_voltage"), m_underVoltageLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("over_current"), m_overCurrentLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("固件版本"), m_fwVersionLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("校准上报"), m_calibLabel);
+    addStatusItem(statusRow++, 0, QStringLiteral("齿槽补偿"), m_anticoggingLabel);
+
+    const QStringList value1Names = value1PartNames();
+    for (int i = 0; i < Value1PartCount; ++i) {
+        addStatusItem(i, 1, value1Names.at(i), m_value1Labels.at(i));
+    }
 
     updateStatusWords(0, 0);
     return panel.panel;
@@ -986,8 +1016,8 @@ bool MainWindow::buildCommandPayload(const CommandDef &command, QByteArray *payl
         out += valuePayload;
         break;
     }
-    case PayloadKind::OptionalUInt16x8:
-        if (!PayloadCodec::parseUInt16List(text, 8, &out, error)) {
+    case PayloadKind::OptionalUInt16x9:
+        if (!PayloadCodec::parseUInt16List(text, Value1PartCount, &out, error)) {
             return false;
         }
         break;
@@ -1133,25 +1163,21 @@ QString MainWindow::describeFrame(const QCanBusFrame &frame, bool updateUi)
         break;
     }
     case 15: {
-        if (payload.size() >= 16) {
-            QStringList names = {QStringLiteral("速度"),
-                                 QStringLiteral("位置"),
-                                 QStringLiteral("hall偏移"),
-                                 QStringLiteral("hall值"),
-                                 QStringLiteral("status"),
-                                 QStringLiteral("errors"),
-                                 QStringLiteral("板载NTC"),
-                                 QStringLiteral("Iq电流")};
+        if (payload.size() >= 2) {
+            const QStringList names = value1PartNames();
             QStringList parts;
-            for (int i = 0; i < 8; ++i) {
+            for (int i = 0; i < Value1PartCount; ++i) {
                 quint16 value = 0;
-                PayloadCodec::decodeUInt16(payload, i * 2, &value);
-                parts << QStringLiteral("%1=%2").arg(names.at(i)).arg(value);
+                QString valueText = QStringLiteral("-");
+                if (PayloadCodec::decodeUInt16(payload, i * 2, &value)) {
+                    valueText = QString::number(value);
+                }
+                parts << QStringLiteral("%1=%2").arg(names.at(i), valueText);
+                if (updateUi && i < m_value1Labels.size()) {
+                    m_value1Labels.at(i)->setText(valueText);
+                }
             }
             const QString text = parts.join(QStringLiteral("  "));
-            if (updateUi) {
-                m_value1Label->setText(text);
-            }
             return QStringLiteral("%1，VALUE_1 %2").arg(prefix, text);
         }
         break;

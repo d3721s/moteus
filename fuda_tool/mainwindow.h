@@ -6,6 +6,7 @@
 #include <QCanBusFrame>
 #include <QMainWindow>
 #include <QMap>
+#include <QVector>
 
 class CanService;
 class QLabel;
@@ -93,7 +94,7 @@ private:
     QLabel *m_fwVersionLabel = nullptr;
     QLabel *m_calibLabel = nullptr;
     QLabel *m_anticoggingLabel = nullptr;
-    QLabel *m_value1Label = nullptr;
+    QVector<QLabel *> m_value1Labels;
 
     QMap<quint8, QLineEdit *> m_commandInputs;
     QMap<quint32, QLineEdit *> m_configEditors;

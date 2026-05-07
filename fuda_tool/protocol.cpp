@@ -64,8 +64,8 @@ const QVector<CommandDef> &Protocol::commandDefinitions()
             PayloadKind::None, QStringLiteral("无参数"), QStringLiteral("回复 uint32 status + uint32 errors"), true, true),
         cmd(14, QStringLiteral("CAN_CMD_STATUSWORD_REPORT"), QStringLiteral("状态字上报"), QStringLiteral("8"),
             PayloadKind::None, QStringLiteral("设备主动上报"), QStringLiteral("uint32 status + uint32 errors"), false, false, true),
-        cmd(15, QStringLiteral("CAN_CMD_GET_VALUE_1"), QStringLiteral("查询变量 1"), QStringLiteral("16"),
-            PayloadKind::OptionalUInt16x8, QStringLiteral("留空；或 8 个 uint16"), QStringLiteral("速度、位置、hall 偏移、hall 值、状态、错误、板载 NTC、Iq 电流"), true, true),
+        cmd(15, QStringLiteral("CAN_CMD_GET_VALUE_1"), QStringLiteral("查询变量 1"), QStringLiteral("18"),
+            PayloadKind::OptionalUInt16x9, QStringLiteral("留空；或 9 个 uint16"), QStringLiteral("速度、位置、hall 偏移、hall 值、状态、错误、板载 NTC、Iq 电流、VALUE_1_9"), true, true),
         cmd(16, QStringLiteral("CAN_CMD_GET_VALUE_2"), QStringLiteral("查询变量 2"), QStringLiteral("预留"),
             PayloadKind::HexBytes, QStringLiteral("预留；十六进制字节"), QStringLiteral("预留命令"), true, false),
         cmd(17, QStringLiteral("CAN_CMD_SET_CONFIG"), QStringLiteral("写单个配置项"), QStringLiteral("8"),
@@ -194,8 +194,8 @@ QString Protocol::payloadKindHint(PayloadKind kind)
         return QStringLiteral("index");
     case PayloadKind::ConfigWrite:
         return QStringLiteral("index,value");
-    case PayloadKind::OptionalUInt16x8:
-        return QStringLiteral("8*uint16 或留空");
+    case PayloadKind::OptionalUInt16x9:
+        return QStringLiteral("9*uint16 或留空");
     }
     return QStringLiteral("unknown");
 }
