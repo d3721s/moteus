@@ -111,6 +111,16 @@ QLabel *valueLabel(const QString &text = QStringLiteral("-"))
     return label;
 }
 
+bool shouldFollowLogTail(const QTableWidget *table)
+{
+    if (!table || !table->verticalScrollBar()) {
+        return false;
+    }
+
+    const QScrollBar *scrollBar = table->verticalScrollBar();
+    return scrollBar->value() >= scrollBar->maximum() - 1;
+}
+
 struct TitledPanel
 {
     QWidget *panel = nullptr;
@@ -1241,6 +1251,8 @@ void MainWindow::addLogFrame(const QString &direction, const QCanBusFrame &frame
         return;
     }
 
+    const bool followTail = shouldFollowLogTail(m_logTable);
+
     while (m_logTable->rowCount() >= LogRowLimit) {
         m_logTable->removeRow(0);
     }
@@ -1261,7 +1273,9 @@ void MainWindow::addLogFrame(const QString &direction, const QCanBusFrame &frame
     m_logTable->setItem(row, 5, readOnlyItem(dlcText(frame)));
     m_logTable->setItem(row, 6, readOnlyItem(PayloadCodec::bytesToHex(frame.payload())));
     m_logTable->setItem(row, 7, readOnlyItem(parsed));
-    m_logTable->scrollToBottom();
+    if (followTail) {
+        m_logTable->scrollToBottom();
+    }
 }
 
 void MainWindow::appendSystemLog(const QString &message)
@@ -1269,6 +1283,8 @@ void MainWindow::appendSystemLog(const QString &message)
     if (!m_logTable) {
         return;
     }
+
+    const bool followTail = shouldFollowLogTail(m_logTable);
 
     while (m_logTable->rowCount() >= LogRowLimit) {
         m_logTable->removeRow(0);
@@ -1284,7 +1300,9 @@ void MainWindow::appendSystemLog(const QString &message)
     m_logTable->setItem(row, 5, readOnlyItem(QStringLiteral("-")));
     m_logTable->setItem(row, 6, readOnlyItem(QStringLiteral("-")));
     m_logTable->setItem(row, 7, readOnlyItem(message));
-    m_logTable->scrollToBottom();
+    if (followTail) {
+        m_logTable->scrollToBottom();
+    }
 }
 
 void MainWindow::updateStatusWords(quint32 status, quint32 errors)
