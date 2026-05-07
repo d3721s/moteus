@@ -96,7 +96,7 @@ public:
     config_.current_limit = servo_config.max_current_A;
     config_.velocity_limit = servo_config.max_velocity;
     config_.pos_gain = servo_config.pid_position.kp;
-    config_.vel_gain = servo_config.pid_position.kd;
+    config_.vel_gain = servo_config.pid_position.kp;
     config_.vel_integrator_gain = servo_config.pid_position.ki;
     config_.current_ctrl_bw = servo_config.pid_dq_hz;
     config_.anticogging_enable = motor.cogging_dq_scale != 0.0f;
@@ -544,7 +544,7 @@ private:
         break;
       }
       case CONFIG_VEL_GAIN: {
-        servo_config.pid_position.kd = config_.vel_gain;
+        servo_config.pid_position.kp = config_.vel_gain;
         break;
       }
       case CONFIG_VEL_INTEGRATOR_GAIN: {

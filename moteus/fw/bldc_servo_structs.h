@@ -519,7 +519,7 @@ struct BldcServoConfig {
 
   // If set, the power limit used will be the lower of this value and
   // the built-in board limit.
-  float max_power_W = std::numeric_limits<float>::quiet_NaN();
+  float max_power_W = 120.0f;
 
   // If set, then the user power maximum will always take effect,
   // overriding the factory set limit profile for the board.  Enabling
@@ -543,8 +543,8 @@ struct BldcServoConfig {
   float motor_temperature_margin = 20.0f;
   float motor_fault_temperature = std::numeric_limits<float>::quiet_NaN();
 
-  float fault_position_error = std::numeric_limits<float>::quiet_NaN();
-  float fault_velocity_error = std::numeric_limits<float>::quiet_NaN();
+  float fault_position_error = 0.01f;
+  float fault_velocity_error = 0.01f;
 
   float velocity_threshold = 0.0f;
   float position_derate = 0.02f;
@@ -592,8 +592,8 @@ struct BldcServoConfig {
 
   // Default values for the position mode velocity and acceleration
   // limits.
-  float default_velocity_limit = std::numeric_limits<float>::quiet_NaN();
-  float default_accel_limit = 50.0f;
+  float default_velocity_limit = 15.0f;
+  float default_accel_limit = 25.0f;
 
   // If true, then the currents in A that are calculated for the D
   // and Q phase are instead directly commanded as voltages on the
@@ -654,7 +654,7 @@ struct BldcServoConfig {
   // When the maximum velocity exceeds this value, a current limit
   // will begin to be applied.  When it reaches max_velocity +
   // max_velocity_derate, the maximum allowed current will be 0.
-  float max_velocity = 500.0;
+  float max_velocity = 30.0;
   float max_velocity_derate = 2.0;
 
   uint16_t cooldown_cycles = 256;
