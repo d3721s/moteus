@@ -1021,8 +1021,18 @@ BOOST_AUTO_TEST_CASE(BldcServoControlDoControl) {
   BOOST_CHECK(ctx.status_.mode == BldcServoMode::kFault);
   BOOST_CHECK(ctx.status_.fault == errc::kOverVoltage);
 
+  // Test fault detection - configurable under voltage.
+  ctx.status_.mode = BldcServoMode::kCurrent;
+  ctx.status_.fault = errc::kSuccess;
+  ctx.config_.min_voltage = 20.0f;
+  ctx.status_.bus_V = 19.0f;
+  ctx.ISR_DoControl(sc, &data);
+  BOOST_CHECK(ctx.status_.mode == BldcServoMode::kFault);
+  BOOST_CHECK(ctx.status_.fault == errc::kUnderVoltage);
+
   // Test fault detection - motor driver fault.
   ctx.status_.mode = BldcServoMode::kCurrent;
+  ctx.status_.fault = errc::kSuccess;
   ctx.status_.bus_V = 24.0f;
   ctx.fault_state = true;
   ctx.ISR_DoControl(sc, &data);
