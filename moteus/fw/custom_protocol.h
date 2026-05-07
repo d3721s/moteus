@@ -55,8 +55,6 @@ public:
         fuda_config_ != nullptr ? fuda_config_->sync_target_enable : 0;
     config_.position_filter_bw =
         fuda_config_ != nullptr ? fuda_config_->position_filter_bw : 0.0f;
-    config_.protect_under_voltage =
-        fuda_config_ != nullptr ? fuda_config_->protect_under_voltage : 0.0f;
     config_.node_id = multiplex_protocol_->config()->id;
     config_.can_baudrate =
         fuda_config_ != nullptr && fuda_config_->can_baudrate > 0
@@ -69,6 +67,13 @@ public:
             : 0;
     config_.calib_valid = 0;
     config_.offset_lut = 0;
+
+    if (fuda_config_ != nullptr && fuda_config_->protect_under_voltage > 0.0f &&
+        bldc_servo_->config().min_voltage == 4.0f) {
+      auto &servo_config =
+          const_cast<BldcServo::Config &>(bldc_servo_->config());
+      servo_config.min_voltage = fuda_config_->protect_under_voltage;
+    }
 
     SyncConfigFromServo();
   }
@@ -107,6 +112,7 @@ public:
     config_.profile_velocity = CleanFloat(servo_config.default_velocity_limit);
     config_.profile_accel = servo_config.default_accel_limit;
     config_.profile_decel = servo_config.default_accel_limit;
+    config_.protect_under_voltage = servo_config.min_voltage;
     config_.protect_over_voltage = servo_config.max_voltage;
     config_.protect_over_current = servo_config.max_current_A;
     config_.protect_i_bus_max = CleanFloat(servo_config.max_regen_power_W);
@@ -116,7 +122,6 @@ public:
     if (fuda_config_ != nullptr) {
       config_.sync_target_enable = fuda_config_->sync_target_enable;
       config_.position_filter_bw = fuda_config_->position_filter_bw;
-      config_.protect_under_voltage = fuda_config_->protect_under_voltage;
     }
 
     if (position_config != nullptr) {
@@ -556,6 +561,10 @@ private:
         servo_config.default_velocity_limit = config_.profile_velocity;
         break;
       }
+      case CONFIG_PROTECT_UNDER_VOLTAGE: {
+        servo_config.min_voltage = config_.protect_under_voltage;
+        break;
+      }
       case CONFIG_PROTECT_OVER_VOLTAGE: {
         servo_config.max_voltage = config_.protect_over_voltage;
         break;
@@ -733,9 +742,16 @@ private:
     case CONFIG_PROFILE_DECEL:
       config_.profile_decel = ToFloat(raw_value);
       break;
-    case CONFIG_PROTECT_UNDER_VOLTAGE:
-      config_.protect_under_voltage = ToFloat(raw_value);
+    case CONFIG_PROTECT_UNDER_VOLTAGE: {
+      const float value = ToFloat(raw_value);
+      if (!std::isfinite(value) || value < 0.0f ||
+          (std::isfinite(config_.protect_over_voltage) &&
+           value >= config_.protect_over_voltage)) {
+        return false;
+      }
+      config_.protect_under_voltage = value;
       break;
+    }
     case CONFIG_PROTECT_OVER_VOLTAGE:
       config_.protect_over_voltage = ToFloat(raw_value);
       break;

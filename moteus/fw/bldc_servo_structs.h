@@ -515,6 +515,8 @@ struct BldcServoConfig {
       invalid_float()
       ;
 
+  float min_voltage = 4.0f;
+
   // If set, the power limit used will be the lower of this value and
   // the built-in board limit.
   float max_power_W = std::numeric_limits<float>::quiet_NaN();
@@ -684,6 +686,7 @@ struct BldcServoConfig {
     a->Visit(MJ_NVP(pwm_rate_hz));
     a->Visit(MJ_NVP(current_sense_ohm));
     a->Visit(MJ_NVP(max_voltage));
+    a->Visit(MJ_NVP(min_voltage));
     a->Visit(MJ_NVP(max_power_W));
     a->Visit(MJ_NVP(override_board_max_power));
     a->Visit(MJ_NVP(temperature_margin));

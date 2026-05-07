@@ -1643,7 +1643,7 @@ class BldcServoControl {
         self().status_.mode = kFault;
         self().status_.fault = errc::kOverVoltage;
       }
-      if (self().status_.bus_V < 4.0f) {
+      if (self().status_.bus_V < self().config_.min_voltage) {
         self().status_.mode = kFault;
         self().status_.fault = errc::kUnderVoltage;
       }
