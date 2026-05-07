@@ -39,6 +39,8 @@ namespace
 {
 constexpr int LogRowLimit = 2000;
 constexpr int Value1PartCount = 9;
+constexpr int CommandActionColumnWidth = 96;
+constexpr int ConfigActionColumnWidth = 86;
 
 QTableWidgetItem *readOnlyItem(const QString &text)
 {
@@ -376,8 +378,9 @@ QWidget *MainWindow::createCommandPanel()
     m_commandTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     m_commandTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
     m_commandTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
-    m_commandTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+    m_commandTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Fixed);
     m_commandTable->setColumnWidth(3, 210);
+    m_commandTable->setColumnWidth(5, CommandActionColumnWidth);
     m_commandTable->verticalHeader()->setDefaultSectionSize(32);
 
     layout->addWidget(m_commandTable);
@@ -453,9 +456,11 @@ QWidget *MainWindow::createConfigPanel()
     m_configTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     m_configTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Interactive);
     m_configTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
-    m_configTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
-    m_configTable->horizontalHeader()->setSectionResizeMode(7, QHeaderView::ResizeToContents);
+    m_configTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Fixed);
+    m_configTable->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Fixed);
     m_configTable->setColumnWidth(4, 150);
+    m_configTable->setColumnWidth(6, ConfigActionColumnWidth);
+    m_configTable->setColumnWidth(7, ConfigActionColumnWidth);
     m_configTable->verticalHeader()->setDefaultSectionSize(28);
 
     layout->addWidget(m_configTable);
