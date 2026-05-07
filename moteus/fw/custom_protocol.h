@@ -9,6 +9,7 @@
 #include <mbed.h>
 #include <string_view>
 
+#include "fw/bootloader.h"
 #include "fw/bldc_servo.h"
 #include "fw/error.h"
 #include "fw/fdcan.h"
@@ -1452,7 +1453,14 @@ private:
               1, data);
     return true;
   }
-  bool HandleDfuStart(int dlc, const char *data) { return false; }
+  bool HandleDfuStart(int dlc, const char *data) {
+    MoteusEnsureOff();
+
+    void (*volatile boot_fn)(uint8_t, USART_TypeDef *, GPIO_TypeDef *, int) =
+        MultiplexBootloader;
+    boot_fn(multiplex_protocol_->config()->id, USART1, GPIOA, 8);
+    return true;
+  }
   bool HandleDfuData(int dlc, const char *data) { return false; }
   bool HandleDfuEnd(int dlc, const char *data) { return false; }
 
