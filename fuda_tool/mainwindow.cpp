@@ -1007,15 +1007,30 @@ bool MainWindow::confirmFactoryReset()
     layout->setContentsMargins(24, 20, 24, 18);
     layout->setSpacing(12);
 
+    auto *contentLayout = new QHBoxLayout();
+    contentLayout->setSpacing(14);
+
+    auto *iconLabel = new QLabel(&dialog);
+    iconLabel->setPixmap(style()->standardIcon(QStyle::SP_MessageBoxWarning).pixmap(42, 42));
+    iconLabel->setFixedSize(46, 46);
+    iconLabel->setAlignment(Qt::AlignTop | Qt::AlignHCenter);
+    contentLayout->addWidget(iconLabel);
+
+    auto *textLayout = new QVBoxLayout();
+    textLayout->setSpacing(8);
+
     auto *messageLabel = new QLabel(QStringLiteral("该命令会恢复全部配置，且仅在失能下有效。"), &dialog);
     messageLabel->setWordWrap(true);
-    messageLabel->setMinimumWidth(520);
-    layout->addWidget(messageLabel);
+    messageLabel->setMinimumWidth(460);
+    textLayout->addWidget(messageLabel);
 
     auto *detailLabel = new QLabel(QStringLiteral("确认发送恢复出厂配置命令？"), &dialog);
     detailLabel->setWordWrap(true);
-    detailLabel->setMinimumWidth(520);
-    layout->addWidget(detailLabel);
+    detailLabel->setMinimumWidth(460);
+    textLayout->addWidget(detailLabel);
+
+    contentLayout->addLayout(textLayout, 1);
+    layout->addLayout(contentLayout);
     layout->addStretch(1);
 
     auto *buttonLayout = new QHBoxLayout();
@@ -1026,6 +1041,21 @@ bool MainWindow::confirmFactoryReset()
     auto *cancelButton = new QPushButton(QStringLiteral("取消"), &dialog);
     confirmButton->setMinimumSize(168, 34);
     cancelButton->setMinimumSize(168, 34);
+    confirmButton->setStyleSheet(QStringLiteral(R"(
+        QPushButton {
+            background: #C62828;
+            color: #FFFFFF;
+            border: 1px solid #8E1B1B;
+            font-weight: 700;
+        }
+        QPushButton:hover {
+            background: #D32F2F;
+            border-color: #7F1515;
+        }
+        QPushButton:pressed {
+            background: #A91F1F;
+        }
+    )"));
     cancelButton->setDefault(true);
 
     buttonLayout->addWidget(confirmButton);
