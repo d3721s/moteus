@@ -75,6 +75,11 @@ QString dlcText(const QCanBusFrame &frame)
     return QString::number(frame.payload().size());
 }
 
+bool shouldFilterCanLogFrame(const QCanBusFrame &frame)
+{
+    return ((frame.frameId() >> 8) & 0xFFU) == 1U;
+}
+
 QString returnCodeText(const QByteArray &payload)
 {
     qint32 result = 0;
@@ -1526,12 +1531,20 @@ bool MainWindow::encodeConfigValue(const ConfigDef &config, const QString &text,
 
 void MainWindow::handleReceivedFrame(const QCanBusFrame &frame)
 {
+    if (shouldFilterCanLogFrame(frame)) {
+        return;
+    }
+
     const QString parsed = describeFrame(frame, true);
     addLogFrame(QStringLiteral("RX"), frame, parsed);
 }
 
 void MainWindow::handleTransmittedFrame(const QCanBusFrame &frame)
 {
+    if (shouldFilterCanLogFrame(frame)) {
+        return;
+    }
+
     const QString parsed = describeFrame(frame, false);
     addLogFrame(QStringLiteral("TX"), frame, parsed);
 }
