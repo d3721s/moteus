@@ -1455,7 +1455,11 @@ private:
   }
   bool HandleDfuStart(int dlc, const char *data) {
     MoteusEnsureOff();
-
+    char reply[4] = {1, 2, 3, 4};
+    SendFrame(Send << DirOffset |
+                  (multiplex_protocol_->config()->id << NodeOffset) |
+                  CAN_CMD_DFU_START,
+              4, reply);
     void (*volatile boot_fn)(uint8_t, USART_TypeDef *, GPIO_TypeDef *, int) =
         MultiplexBootloader;
     boot_fn(multiplex_protocol_->config()->id, USART1, GPIOA, 8);
