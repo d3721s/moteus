@@ -655,9 +655,14 @@ private:
     case CONFIG_TORQUE_CONSTANT:
       config_.torque_constant = ToFloat(raw_value);
       break;
-    case CONFIG_MOTOR_POLE_PAIRS:
-      config_.motor_pole_pairs = ToInt32(raw_value);
+    case CONFIG_MOTOR_POLE_PAIRS: {
+      const int32_t value = ToInt32(raw_value);
+      if (value <= 0 || value > 127) {
+        return false;
+      }
+      config_.motor_pole_pairs = value;
       break;
+    }
     case CONFIG_MOTOR_PHASE_RESISTANCE:
       config_.motor_phase_resistance = ToFloat(raw_value);
       break;
