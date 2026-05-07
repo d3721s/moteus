@@ -11,6 +11,7 @@
 
 class CalibrationRunner;
 class CanService;
+class QCheckBox;
 class QCloseEvent;
 class QLabel;
 class QLineEdit;
@@ -60,6 +61,8 @@ private:
     void sendConfigWrite(quint32 index);
     void startOneClickCalibration();
     void startOneClickAnticogging();
+    void chooseElfFile();
+    void startOneClickDfuFlash();
     void stopOneClickCalibrationProcess();
     void stopOneClickAnticoggingProcess();
     bool buildCommandPayload(const CommandDef &command, QByteArray *payload, QString *error) const;
@@ -111,6 +114,9 @@ private:
     QTableWidget *m_logTable = nullptr;
     ProcessPanel m_calibrationProcess;
     ProcessPanel m_anticoggingProcess;
+    ProcessPanel m_dfuProcess;
+    QCheckBox *m_bootloaderActiveCheck = nullptr;
+    QString m_selectedElfPath;
     bool m_shuttingDown = false;
 
     QLabel *m_lastNodeLabel = nullptr;

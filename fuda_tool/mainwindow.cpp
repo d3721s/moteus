@@ -7,10 +7,12 @@
 
 #include <QApplication>
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QDialog>
 #include <QDoubleValidator>
+#include <QFileDialog>
 #include <QGridLayout>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -107,6 +109,13 @@ bool isReturnCodeCommand(quint8 commandId)
 QStringList splitArguments(const QString &text)
 {
     return text.trimmed().split(QRegularExpression(QStringLiteral("[\\s,;]+")), Qt::SkipEmptyParts);
+}
+
+QString shellQuote(const QString &text)
+{
+    QString quoted = text;
+    quoted.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
+    return QStringLiteral("'") + quoted + QStringLiteral("'");
 }
 
 QStringList value1PartNames()
@@ -257,6 +266,7 @@ void MainWindow::shutdownWorkers()
     m_shuttingDown = true;
     stopProcessPanel(&m_calibrationProcess, true);
     stopProcessPanel(&m_anticoggingProcess, true);
+    stopProcessPanel(&m_dfuProcess, true);
     shutdownCanThread();
 }
 
@@ -647,6 +657,14 @@ QWidget *MainWindow::createDfuPanel()
     auto *endEdit = new QLineEdit(QStringLiteral("00 00 00 00 00 00 00 00"), box);
     auto *sendDataButton = new QPushButton(QStringLiteral("发送数据包"), box);
     auto *endButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("结束升级"), box);
+    auto *selectElfButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogOpenButton), QStringLiteral("选择elf文件"), box);
+    m_dfuProcess.startButton = new QPushButton(style()->standardIcon(QStyle::SP_ArrowForward), QStringLiteral("开始一键升级"), box);
+    m_bootloaderActiveCheck = new QCheckBox(QStringLiteral("bootloader-active"), box);
+    m_dfuProcess.outputEdit = new QPlainTextEdit(box);
+    m_dfuProcess.outputEdit->setReadOnly(true);
+    m_dfuProcess.outputEdit->setMinimumHeight(220);
+    m_dfuProcess.outputEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
+    m_dfuProcess.outputEdit->setMaximumBlockCount(CalibrationOutputMaxBlockCount);
 
     dataEdit->setPlaceholderText(QStringLiteral("1~8 字节，例如: 01 02 03 04"));
     endEdit->setPlaceholderText(QStringLiteral("8 字节校验数据"));
@@ -679,6 +697,8 @@ QWidget *MainWindow::createDfuPanel()
         }
         sendRawProtocolCommand(31, payload);
     });
+    connect(selectElfButton, &QPushButton::clicked, this, &MainWindow::chooseElfFile);
+    connect(m_dfuProcess.startButton, &QPushButton::clicked, this, &MainWindow::startOneClickDfuFlash);
 
     layout->addWidget(startButton, 0, 0);
     layout->addWidget(versionButton, 0, 1);
@@ -688,8 +708,12 @@ QWidget *MainWindow::createDfuPanel()
     layout->addWidget(new QLabel(QStringLiteral("DFU_END"), box), 2, 0);
     layout->addWidget(endEdit, 2, 1, 1, 2);
     layout->addWidget(endButton, 2, 3);
+    layout->addWidget(selectElfButton, 3, 0);
+    layout->addWidget(m_dfuProcess.startButton, 3, 1);
+    layout->addWidget(m_bootloaderActiveCheck, 3, 2);
+    layout->addWidget(m_dfuProcess.outputEdit, 4, 0, 1, 4);
     layout->setColumnStretch(2, 1);
-    layout->setRowStretch(3, 1);
+    layout->setRowStretch(4, 1);
     return box;
 }
 
@@ -1129,6 +1153,39 @@ void MainWindow::startOneClickAnticogging()
 {
     const QString command = QStringLiteral("python3 -u compensate_cogging.py --store -v");
     startProcessPanel(&m_anticoggingProcess, command);
+}
+
+void MainWindow::chooseElfFile()
+{
+    const QString path = QFileDialog::getOpenFileName(this,
+                                                      QStringLiteral("选择 ELF 文件"),
+                                                      QString(),
+                                                      QStringLiteral("ELF 文件 (*.elf);;所有文件 (*)"));
+    if (path.isEmpty()) {
+        return;
+    }
+
+    m_selectedElfPath = path;
+    if (m_dfuProcess.outputEdit) {
+        m_dfuProcess.outputEdit->clear();
+        m_dfuProcess.currentLine.clear();
+        m_dfuProcess.liveLineVisible = false;
+        appendProcessOutput(&m_dfuProcess, QStringLiteral("已选择 ELF 文件：%1\n").arg(path));
+    }
+}
+
+void MainWindow::startOneClickDfuFlash()
+{
+    if (m_selectedElfPath.trimmed().isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("参数错误"), QStringLiteral("请先选择 ELF 文件"));
+        return;
+    }
+
+    QString command = QStringLiteral("python3 -m moteus.moteus_tool --flash %1").arg(shellQuote(m_selectedElfPath));
+    if (m_bootloaderActiveCheck && m_bootloaderActiveCheck->isChecked()) {
+        command += QStringLiteral(" --bootloader-active");
+    }
+    startProcessPanel(&m_dfuProcess, command);
 }
 
 void MainWindow::startProcessPanel(ProcessPanel *panel, const QString &command)
