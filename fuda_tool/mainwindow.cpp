@@ -1002,7 +1002,7 @@ bool MainWindow::confirmFactoryReset()
     box.setIcon(QMessageBox::Warning);
     box.setText(QStringLiteral("该命令会恢复全部配置，且仅在失能下有效。"));
     box.setInformativeText(QStringLiteral("确认发送恢复出厂配置命令？"));
-    box.setMinimumWidth(520);
+    box.setMinimumWidth(1080);
 
     QPushButton *confirmButton = box.addButton(QStringLiteral("确认发送"), QMessageBox::AcceptRole);
     QPushButton *cancelButton = box.addButton(QStringLiteral("取消"), QMessageBox::RejectRole);
