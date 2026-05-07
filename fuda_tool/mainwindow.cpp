@@ -45,6 +45,12 @@ constexpr int CommandActionColumnWidth = 96;
 constexpr int ConfigActionColumnWidth = 86;
 constexpr int CalibrationOutputFlushMs = 100;
 constexpr int CalibrationOutputMaxBlockCount = 3000;
+constexpr int LogTimeColumnWidth = 92;
+constexpr int LogDirectionColumnWidth = 48;
+constexpr int LogIdColumnWidth = 72;
+constexpr int LogNodeColumnWidth = 52;
+constexpr int LogCommandColumnWidth = 150;
+constexpr int LogDlcColumnWidth = 48;
 
 QTableWidgetItem *readOnlyItem(const QString &text)
 {
@@ -711,14 +717,20 @@ QWidget *MainWindow::createLogPanel()
     m_logTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_logTable->setWordWrap(false);
     m_logTable->horizontalHeader()->setStretchLastSection(false);
-    m_logTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    m_logTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    m_logTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    m_logTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    m_logTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-    m_logTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+    m_logTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    m_logTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
+    m_logTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    m_logTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    m_logTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    m_logTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Fixed);
     m_logTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Stretch);
     m_logTable->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Stretch);
+    m_logTable->setColumnWidth(0, LogTimeColumnWidth);
+    m_logTable->setColumnWidth(1, LogDirectionColumnWidth);
+    m_logTable->setColumnWidth(2, LogIdColumnWidth);
+    m_logTable->setColumnWidth(3, LogNodeColumnWidth);
+    m_logTable->setColumnWidth(4, LogCommandColumnWidth);
+    m_logTable->setColumnWidth(5, LogDlcColumnWidth);
     m_logTable->verticalHeader()->setDefaultSectionSize(25);
 
     layout->addWidget(m_logTable);
