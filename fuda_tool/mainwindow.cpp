@@ -48,8 +48,8 @@ constexpr int LogIdColumnWidth = 72;
 constexpr int LogNodeColumnWidth = 52;
 constexpr int LogCommandColumnWidth = 150;
 constexpr int LogDlcColumnWidth = 48;
-constexpr int LogDataColumnWidth = 520;
-constexpr int LogParsedColumnWidth = 720;
+constexpr int LogDataColumnWidth = 640;
+constexpr int LogParsedColumnWidth = 1080;
 
 QTableWidgetItem *readOnlyItem(const QString &text)
 {
