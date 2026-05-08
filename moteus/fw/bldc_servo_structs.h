@@ -543,8 +543,8 @@ struct BldcServoConfig {
   float motor_temperature_margin = 20.0f;
   float motor_fault_temperature = std::numeric_limits<float>::quiet_NaN();
 
-  float fault_position_error = 0.01f;
-  float fault_velocity_error = 0.01f;
+  float fault_position_error = std::numeric_limits<float>::quiet_NaN();;
+  float fault_velocity_error = std::numeric_limits<float>::quiet_NaN();;
 
   float velocity_threshold = 0.0f;
   float position_derate = 0.02f;
