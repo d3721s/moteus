@@ -1323,7 +1323,7 @@ void MainWindow::startOneClickAnticogging()
         return;
     }
 
-    const QString command = QStringLiteral("python3 -m %1 --target %2 --average-count 4 --split-count 16 --store")
+    const QString command = QStringLiteral("python3 %1 --target %2 --average-count 4 --split-count 16 --store")
                                 .arg(shellQuote(m_selectedAnticoggingScriptPath))
                                 .arg(currentNodeId());
     startProcessPanel(&m_anticoggingProcess, command);
