@@ -9,8 +9,8 @@
 #include <mbed.h>
 #include <string_view>
 
-#include "fw/bootloader.h"
 #include "fw/bldc_servo.h"
+#include "fw/bootloader.h"
 #include "fw/error.h"
 #include "fw/fdcan.h"
 #include "fw/fuda.h"
@@ -1455,18 +1455,16 @@ private:
   }
   bool HandleDfuStart(int dlc, const char *data) {
     MoteusEnsureOff();
-    char reply[4] = {1, 2, 3, 4};
-    SendFrame(Send << DirOffset |
-                  (multiplex_protocol_->config()->id << NodeOffset) |
-                  CAN_CMD_DFU_START,
-              4, reply);
     void (*volatile boot_fn)(uint8_t, USART_TypeDef *, GPIO_TypeDef *, int) =
         MultiplexBootloader;
     boot_fn(multiplex_protocol_->config()->id, USART1, GPIOA, 8);
     return true;
   }
   bool HandleDfuData(int dlc, const char *data) { return false; }
-  bool HandleDfuEnd(int dlc, const char *data) { return false; }
+  bool HandleDfuEnd(int dlc, const char *data) {
+    NVIC_SystemReset();
+    return true;
+  }
 
   // Dispatch table: index = cmd_id.
   //   expected_dlc:
