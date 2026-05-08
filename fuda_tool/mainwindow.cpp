@@ -58,6 +58,7 @@ constexpr int LogCommandColumnWidth = 150;
 constexpr int LogDlcColumnWidth = 48;
 constexpr int LogDataColumnWidth = 640;
 constexpr int LogParsedColumnWidth = 1080;
+constexpr int AnticoggingFixedInputWidth = 88;
 constexpr bool DebugAllowControlsWhenDisconnected = true;
 
 QTableWidgetItem *readOnlyItem(const QString &text)
@@ -618,6 +619,7 @@ QWidget *MainWindow::createAnticoggingPanel()
     m_anticoggingSplitSpin = new QSpinBox(box);
     m_anticoggingSplitSpin->setRange(8, 32);
     m_anticoggingSplitSpin->setValue(16);
+    m_anticoggingSplitSpin->setFixedWidth(AnticoggingFixedInputWidth);
     m_anticoggingSplitSpin->setToolTip(QStringLiteral("split-count，建议 16~32"));
     m_anticoggingSpeedSpin = new QDoubleSpinBox(box);
     m_anticoggingSpeedSpin->setDecimals(2);
@@ -628,9 +630,8 @@ QWidget *MainWindow::createAnticoggingPanel()
     m_anticoggingPolesSpin = new QSpinBox(box);
     m_anticoggingPolesSpin->setRange(1, 64);
     m_anticoggingPolesSpin->setValue(20);
+    m_anticoggingPolesSpin->setFixedWidth(AnticoggingFixedInputWidth);
     m_anticoggingPolesSpin->setToolTip(QStringLiteral("poles，仅用于预计时间，电气转速 = speed / poles"));
-    m_anticoggingEstimateEdit = new QLineEdit(box);
-    m_anticoggingEstimateEdit->setReadOnly(true);
     m_anticoggingProcess.startButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("一键齿槽校准"), box);
     m_anticoggingProcess.stopButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("终止齿槽校准"), box);
     m_anticoggingProcess.stopButton->setEnabled(false);
@@ -676,14 +677,12 @@ QWidget *MainWindow::createAnticoggingPanel()
     layout->addWidget(m_anticoggingSpeedSpin, 4, 1);
     layout->addWidget(new QLabel(QStringLiteral("poles"), box), 4, 2);
     layout->addWidget(m_anticoggingPolesSpin, 4, 3);
-    layout->addWidget(new QLabel(QStringLiteral("预计时间"), box), 5, 0);
-    layout->addWidget(m_anticoggingEstimateEdit, 5, 1, 1, 3);
-    layout->addWidget(selectCalibFileButton, 6, 0);
-    layout->addWidget(m_anticoggingProcess.startButton, 6, 1);
-    layout->addWidget(m_anticoggingProcess.stopButton, 6, 2);
-    layout->addWidget(m_anticoggingProcess.outputEdit, 7, 0, 1, 4);
+    layout->addWidget(selectCalibFileButton, 5, 0);
+    layout->addWidget(m_anticoggingProcess.startButton, 5, 1);
+    layout->addWidget(m_anticoggingProcess.stopButton, 5, 2);
+    layout->addWidget(m_anticoggingProcess.outputEdit, 6, 0, 1, 4);
     layout->setColumnStretch(3, 1);
-    layout->setRowStretch(7, 1);
+    layout->setRowStretch(6, 1);
     updateAnticoggingEstimate();
     return box;
 }
@@ -1341,6 +1340,7 @@ void MainWindow::chooseAnticoggingFile()
         m_anticoggingProcess.outputEdit->clear();
         m_anticoggingProcess.currentLine.clear();
         m_anticoggingProcess.liveLineVisible = false;
+        updateAnticoggingEstimate();
         appendProcessOutput(&m_anticoggingProcess, QStringLiteral("已选择校准文件：%1\n").arg(path));
     }
 }
@@ -1370,7 +1370,7 @@ void MainWindow::startOneClickAnticogging()
                                 .arg(averageCount)
                                 .arg(splitCount)
                                 .arg(speedText);
-    startProcessPanel(&m_anticoggingProcess, command);
+    startProcessPanel(&m_anticoggingProcess, command, anticoggingEstimateLine() + QLatin1Char('\n'));
 }
 
 void MainWindow::chooseElfFile()
@@ -1413,7 +1413,7 @@ void MainWindow::startOneClickDfuFlash()
     startProcessPanel(&m_dfuProcess, command);
 }
 
-void MainWindow::startProcessPanel(ProcessPanel *panel, const QString &command)
+void MainWindow::startProcessPanel(ProcessPanel *panel, const QString &command, const QString &initialText)
 {
     if (!panel || !panel->outputEdit) {
         return;
@@ -1426,6 +1426,9 @@ void MainWindow::startProcessPanel(ProcessPanel *panel, const QString &command)
     panel->outputEdit->clear();
     panel->currentLine.clear();
     panel->liveLineVisible = false;
+    if (!initialText.isEmpty()) {
+        appendProcessOutput(panel, initialText.endsWith(QLatin1Char('\n')) ? initialText : initialText + QLatin1Char('\n'));
+    }
     appendProcessOutput(panel, QStringLiteral("开始执行命令。\n\n"));
 
     panel->running = true;
@@ -2014,9 +2017,60 @@ void MainWindow::updateConfigCurrentValue(quint32 index, quint32 rawValue)
     }
 }
 
+QString MainWindow::anticoggingEstimateLine() const
+{
+    if (!m_anticoggingAverageSpin || !m_anticoggingSplitSpin || !m_anticoggingSpeedSpin || !m_anticoggingPolesSpin) {
+        return QStringLiteral("预计时间：-");
+    }
+
+    const int averageCount = m_anticoggingAverageSpin->value();
+    const int poles = m_anticoggingPolesSpin->value();
+    const int splitCount = m_anticoggingSplitSpin->value();
+    const double speed = m_anticoggingSpeedSpin->value();
+    const double electricalSpeed = speed / static_cast<double>(poles);
+    if (electricalSpeed <= 0.0) {
+        return QStringLiteral("预计时间：-");
+    }
+
+    const double minutes = static_cast<double>(splitCount) * (static_cast<double>(averageCount) / electricalSpeed) * 2.0 / 60.0;
+    return QStringLiteral("预计时间：%1 分钟").arg(minutes, 0, 'f', 2);
+}
+
+void MainWindow::setAnticoggingEstimateLine(const QString &line)
+{
+    QPlainTextEdit *edit = m_anticoggingProcess.outputEdit;
+    if (!edit) {
+        return;
+    }
+
+    const QString prefix = QStringLiteral("预计时间：");
+    const QString text = edit->toPlainText();
+    QScrollBar *scrollBar = edit->verticalScrollBar();
+    const bool wasAtBottom = !scrollBar || scrollBar->value() == scrollBar->maximum();
+    const int previousScrollValue = scrollBar ? scrollBar->value() : 0;
+
+    QTextCursor cursor = edit->textCursor();
+    cursor.movePosition(QTextCursor::Start);
+    if (text.isEmpty()) {
+        cursor.insertText(line + QLatin1Char('\n'));
+    } else if (text.startsWith(prefix)) {
+        cursor.select(QTextCursor::LineUnderCursor);
+        cursor.insertText(line);
+    } else {
+        cursor.insertText(line + QLatin1Char('\n'));
+    }
+
+    edit->setTextCursor(cursor);
+    if (wasAtBottom) {
+        edit->moveCursor(QTextCursor::End);
+    } else if (scrollBar) {
+        scrollBar->setValue(previousScrollValue);
+    }
+}
+
 void MainWindow::updateAnticoggingEstimate()
 {
-    if (!m_anticoggingAverageSpin || !m_anticoggingSplitSpin || !m_anticoggingSpeedSpin || !m_anticoggingPolesSpin || !m_anticoggingEstimateEdit) {
+    if (!m_anticoggingAverageSpin || !m_anticoggingSpeedSpin || !m_anticoggingPolesSpin) {
         return;
     }
 
@@ -2027,16 +2081,7 @@ void MainWindow::updateAnticoggingEstimate()
         m_anticoggingSpeedSpin->setMaximum(maxSpeed);
     }
 
-    const int splitCount = m_anticoggingSplitSpin->value();
-    const double speed = m_anticoggingSpeedSpin->value();
-    const double electricalSpeed = speed / static_cast<double>(poles);
-    if (electricalSpeed <= 0.0) {
-        m_anticoggingEstimateEdit->setText(QStringLiteral("-"));
-        return;
-    }
-
-    const double minutes = static_cast<double>(splitCount) * (static_cast<double>(averageCount) / electricalSpeed) * 2.0 / 60.0;
-    m_anticoggingEstimateEdit->setText(QStringLiteral("%1 分钟").arg(minutes, 0, 'f', 2));
+    setAnticoggingEstimateLine(anticoggingEstimateLine());
 }
 
 void MainWindow::setFlagLabel(QLabel *label, bool active)

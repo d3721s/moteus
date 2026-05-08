@@ -84,6 +84,8 @@ private:
 
     void updateStatusWords(quint32 status, quint32 errors);
     void updateConfigCurrentValue(quint32 index, quint32 rawValue);
+    QString anticoggingEstimateLine() const;
+    void setAnticoggingEstimateLine(const QString &line);
     void updateAnticoggingEstimate();
     void setFlagLabel(QLabel *label, bool active);
     void setConnectionState(bool connected, const QString &message);
@@ -103,7 +105,7 @@ private:
         bool liveLineVisible = false;
     };
 
-    void startProcessPanel(ProcessPanel *panel, const QString &command);
+    void startProcessPanel(ProcessPanel *panel, const QString &command, const QString &initialText = QString());
     void stopProcessPanel(ProcessPanel *panel, bool waitForThread = false);
     void appendProcessOutput(ProcessPanel *panel, const QString &text);
     void finishProcessPanel(ProcessPanel *panel, const QString &message);
@@ -130,7 +132,6 @@ private:
     QSpinBox *m_anticoggingSplitSpin = nullptr;
     QDoubleSpinBox *m_anticoggingSpeedSpin = nullptr;
     QSpinBox *m_anticoggingPolesSpin = nullptr;
-    QLineEdit *m_anticoggingEstimateEdit = nullptr;
     QString m_selectedAnticoggingScriptPath;
     QString m_selectedElfPath;
     bool m_shuttingDown = false;
