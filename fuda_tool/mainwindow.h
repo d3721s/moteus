@@ -13,6 +13,7 @@ class CalibrationRunner;
 class CanService;
 class QCheckBox;
 class QCloseEvent;
+class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -83,6 +84,7 @@ private:
 
     void updateStatusWords(quint32 status, quint32 errors);
     void updateConfigCurrentValue(quint32 index, quint32 rawValue);
+    void updateAnticoggingEstimate();
     void setFlagLabel(QLabel *label, bool active);
     void setConnectionState(bool connected, const QString &message);
 
@@ -124,6 +126,11 @@ private:
     ProcessPanel m_anticoggingProcess;
     ProcessPanel m_dfuProcess;
     QCheckBox *m_bootloaderActiveCheck = nullptr;
+    QSpinBox *m_anticoggingAverageSpin = nullptr;
+    QSpinBox *m_anticoggingSplitSpin = nullptr;
+    QDoubleSpinBox *m_anticoggingSpeedSpin = nullptr;
+    QSpinBox *m_anticoggingPolesSpin = nullptr;
+    QLineEdit *m_anticoggingEstimateEdit = nullptr;
     QString m_selectedAnticoggingScriptPath;
     QString m_selectedElfPath;
     bool m_shuttingDown = false;

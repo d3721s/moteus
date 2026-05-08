@@ -11,6 +11,7 @@
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QDialog>
+#include <QDoubleSpinBox>
 #include <QDoubleValidator>
 #include <QFileDialog>
 #include <QGridLayout>
@@ -610,6 +611,26 @@ QWidget *MainWindow::createAnticoggingPanel()
     auto *readLutButton = new QPushButton(QStringLiteral("读取补偿表"), box);
     auto *saveButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("保存配置"), box);
     auto *selectCalibFileButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogOpenButton), QStringLiteral("选择校准文件"), box);
+    m_anticoggingAverageSpin = new QSpinBox(box);
+    m_anticoggingAverageSpin->setRange(1, 8);
+    m_anticoggingAverageSpin->setValue(4);
+    m_anticoggingAverageSpin->setToolTip(QStringLiteral("average-count，建议 2~8"));
+    m_anticoggingSplitSpin = new QSpinBox(box);
+    m_anticoggingSplitSpin->setRange(8, 32);
+    m_anticoggingSplitSpin->setValue(16);
+    m_anticoggingSplitSpin->setToolTip(QStringLiteral("split-count，建议 16~32"));
+    m_anticoggingSpeedSpin = new QDoubleSpinBox(box);
+    m_anticoggingSpeedSpin->setDecimals(2);
+    m_anticoggingSpeedSpin->setSingleStep(0.1);
+    m_anticoggingSpeedSpin->setRange(0.1, 4.0);
+    m_anticoggingSpeedSpin->setValue(2.0);
+    m_anticoggingSpeedSpin->setToolTip(QStringLiteral("speed，最大值会限制为 average-count * poles，避免采样时间为 0"));
+    m_anticoggingPolesSpin = new QSpinBox(box);
+    m_anticoggingPolesSpin->setRange(1, 64);
+    m_anticoggingPolesSpin->setValue(20);
+    m_anticoggingPolesSpin->setToolTip(QStringLiteral("poles，仅用于预计时间，电气转速 = speed / poles"));
+    m_anticoggingEstimateEdit = new QLineEdit(box);
+    m_anticoggingEstimateEdit->setReadOnly(true);
     m_anticoggingProcess.startButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("一键齿槽校准"), box);
     m_anticoggingProcess.stopButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("终止齿槽校准"), box);
     m_anticoggingProcess.stopButton->setEnabled(false);
@@ -632,6 +653,10 @@ QWidget *MainWindow::createAnticoggingPanel()
     connect(readLutButton, &QPushButton::clicked, this, [this]() { sendConfigRead(37); });
     connect(saveButton, &QPushButton::clicked, this, [this]() { sendProtocolCommand(19, false); });
     connect(selectCalibFileButton, &QPushButton::clicked, this, &MainWindow::chooseAnticoggingFile);
+    connect(m_anticoggingAverageSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int) { updateAnticoggingEstimate(); });
+    connect(m_anticoggingSplitSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int) { updateAnticoggingEstimate(); });
+    connect(m_anticoggingSpeedSpin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double) { updateAnticoggingEstimate(); });
+    connect(m_anticoggingPolesSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int) { updateAnticoggingEstimate(); });
     connect(m_anticoggingProcess.startButton, &QPushButton::clicked, this, &MainWindow::startOneClickAnticogging);
     connect(m_anticoggingProcess.stopButton, &QPushButton::clicked, this, &MainWindow::stopOneClickAnticoggingProcess);
 
@@ -643,12 +668,23 @@ QWidget *MainWindow::createAnticoggingPanel()
     layout->addWidget(readEnableButton, 1, 2);
     layout->addWidget(readLutButton, 2, 0);
     layout->addWidget(saveButton, 2, 1);
-    layout->addWidget(selectCalibFileButton, 3, 0);
-    layout->addWidget(m_anticoggingProcess.startButton, 3, 1);
-    layout->addWidget(m_anticoggingProcess.stopButton, 3, 2);
-    layout->addWidget(m_anticoggingProcess.outputEdit, 4, 0, 1, 4);
+    layout->addWidget(new QLabel(QStringLiteral("average-count"), box), 3, 0);
+    layout->addWidget(m_anticoggingAverageSpin, 3, 1);
+    layout->addWidget(new QLabel(QStringLiteral("split-count"), box), 3, 2);
+    layout->addWidget(m_anticoggingSplitSpin, 3, 3);
+    layout->addWidget(new QLabel(QStringLiteral("speed"), box), 4, 0);
+    layout->addWidget(m_anticoggingSpeedSpin, 4, 1);
+    layout->addWidget(new QLabel(QStringLiteral("poles"), box), 4, 2);
+    layout->addWidget(m_anticoggingPolesSpin, 4, 3);
+    layout->addWidget(new QLabel(QStringLiteral("预计时间"), box), 5, 0);
+    layout->addWidget(m_anticoggingEstimateEdit, 5, 1, 1, 3);
+    layout->addWidget(selectCalibFileButton, 6, 0);
+    layout->addWidget(m_anticoggingProcess.startButton, 6, 1);
+    layout->addWidget(m_anticoggingProcess.stopButton, 6, 2);
+    layout->addWidget(m_anticoggingProcess.outputEdit, 7, 0, 1, 4);
     layout->setColumnStretch(3, 1);
-    layout->setRowStretch(4, 1);
+    layout->setRowStretch(7, 1);
+    updateAnticoggingEstimate();
     return box;
 }
 
@@ -939,7 +975,7 @@ void MainWindow::applyVisualStyle()
         QSplitter::handle:vertical {
             height: 5px;
         }
-        QLineEdit, QSpinBox {
+        QLineEdit, QSpinBox, QDoubleSpinBox {
             min-height: 24px;
             border: 1px solid #8A8A8A;
             border-radius: 0;
@@ -1323,9 +1359,17 @@ void MainWindow::startOneClickAnticogging()
         return;
     }
 
-    const QString command = QStringLiteral("python3 %1 --target %2 --average-count 4 --split-count 16 --store")
+    const int averageCount = m_anticoggingAverageSpin ? m_anticoggingAverageSpin->value() : 4;
+    const int splitCount = m_anticoggingSplitSpin ? m_anticoggingSplitSpin->value() : 16;
+    const double speed = m_anticoggingSpeedSpin ? m_anticoggingSpeedSpin->value() : 2.0;
+    const QString speedText = QString::number(speed, 'g', 6);
+
+    const QString command = QStringLiteral("python3 %1 --target %2 --average-count %3 --split-count %4 --speed %5 --store")
                                 .arg(shellQuote(m_selectedAnticoggingScriptPath))
-                                .arg(currentNodeId());
+                                .arg(currentNodeId())
+                                .arg(averageCount)
+                                .arg(splitCount)
+                                .arg(speedText);
     startProcessPanel(&m_anticoggingProcess, command);
 }
 
@@ -1968,6 +2012,31 @@ void MainWindow::updateConfigCurrentValue(quint32 index, quint32 rawValue)
     } else {
         item->setText(QString::number(static_cast<qint32>(rawValue)));
     }
+}
+
+void MainWindow::updateAnticoggingEstimate()
+{
+    if (!m_anticoggingAverageSpin || !m_anticoggingSplitSpin || !m_anticoggingSpeedSpin || !m_anticoggingPolesSpin || !m_anticoggingEstimateEdit) {
+        return;
+    }
+
+    const int averageCount = m_anticoggingAverageSpin->value();
+    const int poles = m_anticoggingPolesSpin->value();
+    const double maxSpeed = static_cast<double>(averageCount * poles);
+    if (m_anticoggingSpeedSpin->maximum() != maxSpeed) {
+        m_anticoggingSpeedSpin->setMaximum(maxSpeed);
+    }
+
+    const int splitCount = m_anticoggingSplitSpin->value();
+    const double speed = m_anticoggingSpeedSpin->value();
+    const double electricalSpeed = speed / static_cast<double>(poles);
+    if (electricalSpeed <= 0.0) {
+        m_anticoggingEstimateEdit->setText(QStringLiteral("-"));
+        return;
+    }
+
+    const double minutes = static_cast<double>(splitCount) * (static_cast<double>(averageCount) / electricalSpeed) * 2.0 / 60.0;
+    m_anticoggingEstimateEdit->setText(QStringLiteral("%1 分钟").arg(minutes, 0, 'f', 2));
 }
 
 void MainWindow::setFlagLabel(QLabel *label, bool active)
