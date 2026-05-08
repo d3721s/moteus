@@ -1301,9 +1301,6 @@ void MainWindow::sendConfigWrite(quint32 index)
 
     QByteArray payload = PayloadCodec::encodeUInt32(index);
     payload += valuePayload;
-    if (!confirmConfigWritePayload(payload)) {
-        return;
-    }
 
     emit sendCanCommandRequested(currentNodeId(), 17, payload);
 }
