@@ -1255,10 +1255,6 @@ SpiEncoderDebugTab::EncoderReadResult SpiEncoderDebugTab::readMt6826()
 {
     EncoderReadResult result;
     QString error;
-    if (!configureForModel(EncoderModel::Mt6826, &error)) {
-        result.errorText = error;
-        return result;
-    }
     QByteArray rx;
     if (!performSpiTransaction(QByteArray::fromHex("A003000000"), &rx, DefaultTimeoutMs, true, &error)) {
         result.errorText = error;
@@ -1291,10 +1287,6 @@ SpiEncoderDebugTab::EncoderReadResult SpiEncoderDebugTab::readMt6835()
 {
     EncoderReadResult result;
     QString error;
-    if (!configureForModel(EncoderModel::Mt6835, &error)) {
-        result.errorText = error;
-        return result;
-    }
     QByteArray rx;
     if (!performSpiTransaction(QByteArray::fromHex("A00300000000"), &rx, DefaultTimeoutMs, true, &error)) {
         result.errorText = error;
@@ -1336,10 +1328,6 @@ SpiEncoderDebugTab::EncoderReadResult SpiEncoderDebugTab::readMa600()
 {
     EncoderReadResult result;
     QString error;
-    if (!configureForModel(EncoderModel::Ma600, &error)) {
-        result.errorText = error;
-        return result;
-    }
 
     QByteArray rx;
     if (!performSpiTransaction(QByteArray::fromHex("0000"), &rx, DefaultTimeoutMs, true, &error)) {
@@ -1372,10 +1360,6 @@ SpiEncoderDebugTab::EncoderReadResult SpiEncoderDebugTab::readKth7812(bool crc4)
 {
     EncoderReadResult result;
     QString error;
-    if (!configureForModel(crc4 ? EncoderModel::Kth7812C : EncoderModel::Kth7812N, &error)) {
-        result.errorText = error;
-        return result;
-    }
 
     QByteArray rx;
     if (!performSpiTransaction(QByteArray::fromHex("0000"), &rx, DefaultTimeoutMs, true, &error)) {
