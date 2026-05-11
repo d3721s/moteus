@@ -484,9 +484,11 @@ class MoteusController::Impl : public multiplex::MicroServer::Server {
                    persistent_config, command_manager, telemetry_manager,
                    multiplex_protocol->MakeTunnel(2),
                    timer,
-                   g_measured_hw_family != 3 ?
-                   AuxPort::kDefaultOnboardSpi :
-                   AuxPort::kDefaultOnboardMa600,
+                   g_measured_hw_family == 3 ?
+                   AuxPort::kDefaultOnboardMa600 :
+                   (g_hw_pins.mt6835_cs != NC ?
+                    AuxPort::kDefaultOnboardMt6835 :
+                    AuxPort::kDefaultOnboardSpi),
                    (g_measured_hw_family == 2 ||
                     g_measured_hw_family == 3) ?
                    AuxPort::kDefaultUartSerial : AuxPort::kDefaultUartDisabled,

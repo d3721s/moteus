@@ -63,6 +63,11 @@ struct MoteusHwPins {
 
   PinName as5047_cs = NC;
 
+  PinName mt6835_cs = NC;
+  PinName mt6835_mosi = NC;
+  PinName mt6835_miso = NC;
+  PinName mt6835_sck = NC;
+
   PinName can_td = NC;
   PinName can_rd = NC;
 

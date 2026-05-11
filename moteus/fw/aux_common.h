@@ -42,6 +42,8 @@ struct Spi {
       kBoardDefault,
       kCuiAmt22,
       kOrbis,
+      kMt6835,
+      kOnboardMt6835,
 
       kNumModes,
     };
@@ -556,6 +558,8 @@ struct IsEnum<moteus::aux::Spi::Config::Mode> {
         { M::kBoardDefault, "board_default" },
         { M::kCuiAmt22, "cui_amt22" },
         { M::kOrbis, "orbis" },
+        { M::kMt6835, "mt6835" },
+        { M::kOnboardMt6835, "onboard_mt6835" },
       }};
   }
 };

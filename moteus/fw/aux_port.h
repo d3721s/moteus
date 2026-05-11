@@ -43,6 +43,7 @@
 #include "fw/mbed_util.h"
 #include "fw/millisecond_timer.h"
 #include "fw/moteus_hw.h"
+#include "fw/mt6835.h"
 #include "fw/stm32_i2c.h"
 #include "fw/strtof.h"
 #include "fw/uart_fdcanusb_micro_server.h"
@@ -64,6 +65,7 @@ class AuxPort {
     kNoDefaultSpi,
     kDefaultOnboardSpi,
     kDefaultOnboardMa600,
+    kDefaultOnboardMt6835,
   };
 
   enum UartDefault {
@@ -139,6 +141,10 @@ class AuxPort {
           ma732_->StartSample();
           break;
         }
+        case SampleType::kMt6835: {
+          mt6835_->StartSample();
+          break;
+        }
         case SampleType::kIcPz: {
           ic_pz_->ISR_StartSample();
           break;
@@ -168,6 +174,12 @@ class AuxPort {
         case SampleType::kMa732: {
           status_.spi.active = true;
           status_.spi.value = ma732_->FinishSample();
+          status_.spi.nonce += 1;
+          break;
+        }
+        case SampleType::kMt6835: {
+          status_.spi.active = true;
+          status_.spi.value = mt6835_->FinishSample();
           status_.spi.nonce += 1;
           break;
         }
@@ -392,6 +404,18 @@ class AuxPort {
       }
     }
 
+    if (!mt6835_ && mt6835_options_) {
+      if (timer_->read_ms() > 10) {
+        __disable_irq();
+
+        mt6835_.emplace(*mt6835_options_);
+        AddSampleType(SampleType::kMt6835, true, true);
+        mt6835_->Sample();
+
+        __enable_irq();
+      }
+    }
+
     if (ic_pz_) {
       ic_pz_->PollMillisecond();
     }
@@ -466,18 +490,19 @@ class AuxPort {
     kAs5047 = 1,
     kMa732 = 2,
     kIcPz = 3,
+    kMt6835 = 4,
 
-    kGpio = 4,
-    kHall = 5,
-    kQuad = 6,
-    kIndex = 7,
-    kAksim2 = 8,
-    kCuiAmt21 = 9,
-    kI2c = 10,
-    kCuiAmt22 = 11,
-    kPwmInput = 12,
-    kBissC = 13,
-    kOrbis = 14,
+    kGpio = 5,
+    kHall = 6,
+    kQuad = 7,
+    kIndex = 8,
+    kAksim2 = 9,
+    kCuiAmt21 = 10,
+    kI2c = 11,
+    kCuiAmt22 = 12,
+    kPwmInput = 13,
+    kBissC = 14,
+    kOrbis = 15,
 
     kLastEntry,
   };
@@ -854,6 +879,8 @@ class AuxPort {
     as5047_options_.reset();
     ma732_.reset();
     ma732_options_.reset();
+    mt6835_.reset();
+    mt6835_options_.reset();
     onboard_cs_.reset();
     cui_amt22_.reset();
     cui_amt22_options_.reset();
@@ -942,7 +969,17 @@ class AuxPort {
           config_.spi.mode = aux::Spi::Config::Mode::kOnboardMa600;
           break;
         }
+        case kDefaultOnboardMt6835: {
+          onboard_spi_available_ = true;
+          config_.spi.mode = aux::Spi::Config::Mode::kOnboardMt6835;
+          break;
+        }
       }
+    }
+
+    if (config_.spi.mode == aux::Spi::Config::kOnboardAs5047 &&
+        spi_default_ == kDefaultOnboardMt6835) {
+      config_.spi.mode = aux::Spi::Config::Mode::kOnboardMt6835;
     }
 
     if (config_.uart.mode == aux::UartEncoder::Config::kBoardDefault) {
@@ -1047,36 +1084,63 @@ class AuxPort {
       return;
     }
 
-    if ((config_.spi.mode != aux::Spi::Config::kOnboardAs5047 &&
-         config_.spi.mode != aux::Spi::Config::kOnboardMa600) &&
+    if (config_.spi.mode == aux::Spi::Config::kOnboardMt6835 &&
+        spi_default_ != kDefaultOnboardMt6835) {
+      status_.error = aux::AuxError::kSpiPinError;
+      return;
+    }
+
+    const bool using_onboard_spi =
+        config_.spi.mode == aux::Spi::Config::kOnboardAs5047 ||
+        config_.spi.mode == aux::Spi::Config::kOnboardMa600 ||
+        config_.spi.mode == aux::Spi::Config::kOnboardMt6835;
+    const bool using_onboard_mt6835 =
+        config_.spi.mode == aux::Spi::Config::kOnboardMt6835;
+
+    if (!using_onboard_spi &&
         onboard_spi_available_) {
       // If we're not using the onboard encoder, ensure that its CS
       // line is not asserted.
-      onboard_cs_.emplace(g_hw_pins.as5047_cs, 1);
+      const PinName onboard_cs_pin =
+          (spi_default_ == kDefaultOnboardMt6835) ?
+          g_hw_pins.mt6835_cs : g_hw_pins.as5047_cs;
+      if (onboard_cs_pin != NC) {
+        onboard_cs_.emplace(onboard_cs_pin, 1);
+      }
     }
 
     // Default to the onboard encoder for SPI.
     if (config_.spi.mode != aux::Spi::Config::kDisabled) {
-      const auto maybe_spi = aux::FindSpiOption(
-          config_.pins, pin_count_, hw_config_,
-          ((config_.spi.mode == aux::Spi::Config::kOnboardAs5047 ||
-            config_.spi.mode == aux::Spi::Config::kOnboardMa600) ?
-           aux::kDoNotRequireCs : aux::kRequireCs));
-      if (!maybe_spi) {
-        status_.error = aux::AuxError::kSpiPinError;
-        return;
-      }
-      const PinName spi_cs_pin =
-          (config_.spi.mode == aux::Spi::Config::kOnboardAs5047 ||
-           config_.spi.mode == aux::Spi::Config::kOnboardMa600) ?
-          g_hw_pins.as5047_cs : maybe_spi->cs;
-
       Stm32Spi::Options spi_options;
       spi_options.frequency = config_.spi.rate_hz;
-      spi_options.cs = spi_cs_pin;
-      spi_options.mosi = maybe_spi->mosi;
-      spi_options.miso = maybe_spi->miso;
-      spi_options.sck = maybe_spi->sck;
+
+      if (using_onboard_mt6835) {
+        spi_options.cs = g_hw_pins.mt6835_cs;
+        spi_options.mosi = g_hw_pins.mt6835_mosi;
+        spi_options.miso = g_hw_pins.mt6835_miso;
+        spi_options.sck = g_hw_pins.mt6835_sck;
+
+        if (spi_options.cs == NC ||
+            spi_options.mosi == NC ||
+            spi_options.miso == NC ||
+            spi_options.sck == NC) {
+          status_.error = aux::AuxError::kSpiPinError;
+          return;
+        }
+      } else {
+        const auto maybe_spi = aux::FindSpiOption(
+            config_.pins, pin_count_, hw_config_,
+            (using_onboard_spi ? aux::kDoNotRequireCs : aux::kRequireCs));
+        if (!maybe_spi) {
+          status_.error = aux::AuxError::kSpiPinError;
+          return;
+        }
+
+        spi_options.cs = using_onboard_spi ? g_hw_pins.as5047_cs : maybe_spi->cs;
+        spi_options.mosi = maybe_spi->mosi;
+        spi_options.miso = maybe_spi->miso;
+        spi_options.sck = maybe_spi->sck;
+      }
 
       switch (config_.spi.mode) {
         case aux::Spi::Config::kAs5047:
@@ -1149,6 +1213,13 @@ class AuxPort {
               (config_.spi.trim == T::kTrimY) ? 2 :
               0;
           ma732_options_ = options;
+          break;
+        }
+        case aux::Spi::Config::kMt6835:
+        case aux::Spi::Config::kOnboardMt6835: {
+          MT6835::Options options = spi_options;
+          options.timeout = 2000;
+          mt6835_options_ = options;
           break;
         }
         case aux::Spi::Config::kDisabled:
@@ -1525,6 +1596,9 @@ class AuxPort {
 
   std::optional<MA732> ma732_;
   std::optional<MA732::Options> ma732_options_;
+
+  std::optional<MT6835> mt6835_;
+  std::optional<MT6835::Options> mt6835_options_;
 
   std::optional<CuiAmt22> cui_amt22_;
   std::optional<CuiAmt22::Options> cui_amt22_options_;

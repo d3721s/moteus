@@ -344,6 +344,10 @@ MoteusHwPins FindHardwarePins(FamilyAndVersion fv) {
     result.vsense_adc_scale = 0.017947f;
 
     result.as5047_cs = PB_2;
+    result.mt6835_cs = PC_0;
+    result.mt6835_mosi = PC_4;
+    result.mt6835_miso = PF_0;
+    result.mt6835_sck = PF_1;
 
     result.can_td = PB_6;
     result.can_rd = PB_5;

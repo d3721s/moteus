@@ -383,6 +383,9 @@ The type of SPI device.
 * 5 - MA600 (CPR == 65536)
 * 8 - AMT22 (CPR == 16384)
 * 9 - RLS Orbis (CPR == 16384)
+* 10 - MT6835 (CPR == 2097152)
+* 11 - The onboard MT6835 (CPR == 2097152). Only valid for aux1.
+  Uses PC0 CS, PC4 MOSI, PF0 MISO, and PF1 SCLK.
 
 NOTE: iC-PZ devices require significant configuration and calibration
 before use.  Diagnostic mode commands are provided for low level
