@@ -1460,7 +1460,7 @@ private:
     boot_fn(multiplex_protocol_->config()->id, USART1, GPIOA, 8);
     return true;
   }
-  bool HandleDfuData(int dlc, const char *data) { return false; }
+  bool HandleDfuData(int dlc, const char *data) { return true; } // 放在bl中
   bool HandleDfuEnd(int dlc, const char *data) {
     NVIC_SystemReset();
     return true;
