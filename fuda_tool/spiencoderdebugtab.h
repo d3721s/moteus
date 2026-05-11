@@ -86,6 +86,10 @@ private:
                      int timeoutMs,
                      DebugFrame *response,
                      QString *error);
+    bool sendCommandNoResponse(quint8 cmd,
+                               const QByteArray &payload,
+                               int timeoutMs,
+                               QString *error);
     bool readFrame(DebugFrame *frame, int timeoutMs, QString *error);
     bool tryExtractFrame(DebugFrame *frame, QString *error);
 
@@ -176,4 +180,3 @@ private:
 };
 
 #endif // SPIENCODERDEBUGTAB_H
-

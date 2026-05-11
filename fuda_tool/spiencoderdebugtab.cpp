@@ -704,8 +704,7 @@ bool SpiEncoderDebugTab::querySpiConfig(QString *summary, QString *error)
 
 bool SpiEncoderDebugTab::setCsLevel(bool high, QString *error)
 {
-    DebugFrame response;
-    return sendCommand(0x03, makeByteArray({0x00, high ? 1 : 0}), 0x03, DefaultTimeoutMs, &response, error);
+    return sendCommandNoResponse(0x03, makeByteArray({0x00, high ? 1 : 0}), DefaultTimeoutMs, error);
 }
 
 bool SpiEncoderDebugTab::spiTransfer(const QByteArray &tx, QByteArray *rx, QString *error)
@@ -822,6 +821,35 @@ bool SpiEncoderDebugTab::sendCommand(quint8 cmd,
         *error = QStringLiteral("无响应");
     }
     return false;
+}
+
+bool SpiEncoderDebugTab::sendCommandNoResponse(quint8 cmd,
+                                               const QByteArray &payload,
+                                               int timeoutMs,
+                                               QString *error)
+{
+    if (!m_serial->isOpen()) {
+        if (error) {
+            *error = QStringLiteral("串口未打开");
+        }
+        return false;
+    }
+
+    const QByteArray frame = buildFrame(cmd, payload);
+    if (m_serial->write(frame) != frame.size()) {
+        if (error) {
+            *error = QStringLiteral("串口写入失败: %1").arg(m_serial->errorString());
+        }
+        return false;
+    }
+    if (!m_serial->waitForBytesWritten(timeoutMs)) {
+        if (error) {
+            *error = QStringLiteral("写入超时");
+        }
+        return false;
+    }
+    appendProtoLog(QStringLiteral("TX"), frame);
+    return true;
 }
 
 bool SpiEncoderDebugTab::readFrame(DebugFrame *frame, int timeoutMs, QString *error)
