@@ -231,7 +231,6 @@ MainWindow::MainWindow(QWidget *parent)
     tabs->addTab(createCalibrationPanel(), QStringLiteral("电机校准"));
     tabs->addTab(createAnticoggingPanel(), QStringLiteral("齿槽补偿"));
     tabs->addTab(createDfuPanel(), QStringLiteral("远程升级"));
-    tabs->addTab(new SpiEncoderDebugTab(tabs), QStringLiteral("编码器SPI调试"));
 
     workSplitter->addWidget(tabs);
     QWidget *statusPanel = createStatusPanel();
@@ -336,6 +335,7 @@ QWidget *MainWindow::createConnectionPanel()
 
     auto *connectButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("连接"), box);
     auto *disconnectButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("断开"), box);
+    auto *spiDebugButton = new QPushButton(QStringLiteral("进入SPI调试"), box);
     m_connectionStateLabel = new QLabel(box);
     m_connectionStateLabel->setObjectName(QStringLiteral("connectionState"));
 
@@ -353,8 +353,9 @@ QWidget *MainWindow::createConnectionPanel()
     layout->addWidget(m_dataBitrateSpin, 0, 8);
     layout->addWidget(connectButton, 0, 9);
     layout->addWidget(disconnectButton, 0, 10);
-    layout->addWidget(m_connectionStateLabel, 0, 11);
-    layout->setColumnStretch(11, 1);
+    layout->addWidget(spiDebugButton, 0, 11);
+    layout->addWidget(m_connectionStateLabel, 0, 12);
+    layout->setColumnStretch(12, 1);
 
     connect(connectButton, &QPushButton::clicked, this, [this]() {
         const QString interfaceName = m_interfaceEdit->text().trimmed();
@@ -367,8 +368,26 @@ QWidget *MainWindow::createConnectionPanel()
                                           m_dataBitrateSpin->value());
     });
     connect(disconnectButton, &QPushButton::clicked, this, &MainWindow::disconnectCanInterfaceRequested);
+    connect(spiDebugButton, &QPushButton::clicked, this, &MainWindow::showSpiDebugDialog);
 
     return box;
+}
+
+void MainWindow::showSpiDebugDialog()
+{
+    if (!m_spiDebugDialog) {
+        auto *dialog = new QDialog(this);
+        dialog->setWindowTitle(QStringLiteral("编码器SPI调试"));
+        dialog->resize(1260, 860);
+        auto *layout = new QVBoxLayout(dialog);
+        layout->setContentsMargins(6, 6, 6, 6);
+        layout->addWidget(new SpiEncoderDebugTab(dialog));
+        m_spiDebugDialog = dialog;
+    }
+
+    m_spiDebugDialog->show();
+    m_spiDebugDialog->raise();
+    m_spiDebugDialog->activateWindow();
 }
 
 QWidget *MainWindow::createCommandPanel()

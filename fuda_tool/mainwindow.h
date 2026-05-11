@@ -13,6 +13,7 @@ class CalibrationRunner;
 class CanService;
 class QCheckBox;
 class QCloseEvent;
+class QDialog;
 class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
@@ -89,6 +90,7 @@ private:
     void updateAnticoggingEstimate();
     void setFlagLabel(QLabel *label, bool active);
     void setConnectionState(bool connected, const QString &message);
+    void showSpiDebugDialog();
 
     quint8 currentNodeId() const;
     QString commandInputText(quint8 commandId) const;
@@ -113,6 +115,7 @@ private:
     QThread *m_canThread = nullptr;
     CanService *m_canService = nullptr;
     QWidget *m_canContentArea = nullptr;
+    QPointer<QDialog> m_spiDebugDialog;
 
     QLineEdit *m_interfaceEdit = nullptr;
     QSpinBox *m_nodeSpin = nullptr;
