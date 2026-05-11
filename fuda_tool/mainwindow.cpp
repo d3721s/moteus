@@ -4,6 +4,7 @@
 #include "canidcodec.h"
 #include "canservice.h"
 #include "payloadcodec.h"
+#include "spiencoderdebugtab.h"
 
 #include <QApplication>
 #include <QAbstractItemView>
@@ -230,6 +231,7 @@ MainWindow::MainWindow(QWidget *parent)
     tabs->addTab(createCalibrationPanel(), QStringLiteral("电机校准"));
     tabs->addTab(createAnticoggingPanel(), QStringLiteral("齿槽补偿"));
     tabs->addTab(createDfuPanel(), QStringLiteral("远程升级"));
+    tabs->addTab(new SpiEncoderDebugTab(tabs), QStringLiteral("编码器SPI调试"));
 
     workSplitter->addWidget(tabs);
     QWidget *statusPanel = createStatusPanel();

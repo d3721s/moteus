@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.19)
 project(fuda_tool LANGUAGES CXX)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets SerialBus)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets SerialBus SerialPort)
 
 qt_standard_project_setup()
+set(CMAKE_AUTOMOC_COMPILER_PREDEFINES OFF)
 
 qt_add_executable(fuda_tool
     WIN32 MACOSX_BUNDLE
@@ -20,13 +21,18 @@ qt_add_executable(fuda_tool
     payloadcodec.h
     protocol.cpp
     protocol.h
+    spiencoderdebugtab.cpp
+    spiencoderdebugtab.h
 )
+
+set_property(TARGET fuda_tool PROPERTY AUTOGEN_COMMAND_LINE_LENGTH_MAX 32768)
 
 target_link_libraries(fuda_tool
     PRIVATE
         Qt::Core
         Qt::Widgets
         Qt::SerialBus
+        Qt::SerialPort
 )
 
 target_compile_features(fuda_tool PRIVATE cxx_std_17)
