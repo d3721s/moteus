@@ -484,8 +484,6 @@ class MoteusController::Impl : public multiplex::MicroServer::Server {
                    persistent_config, command_manager, telemetry_manager,
                    multiplex_protocol->MakeTunnel(2),
                    timer,
-                   g_hw_pins.kth7812_cs != NC ?
-                   AuxPort::kDefaultOnboardKth7812 :
                    g_measured_hw_family == 3 ?
                    AuxPort::kDefaultOnboardMa600 :
                    (g_hw_pins.mt6835_cs != NC ?
@@ -500,6 +498,8 @@ class MoteusController::Impl : public multiplex::MicroServer::Server {
                    persistent_config, command_manager, telemetry_manager,
                    multiplex_protocol->MakeTunnel(3),
                    timer,
+                   g_hw_pins.kth7812_cs != NC ?
+                   AuxPort::kDefaultOnboardKth7812 :
                    AuxPort::kNoDefaultSpi,
                    (g_measured_hw_family == 0 ||
                     g_measured_hw_family == 1) ?
