@@ -201,7 +201,7 @@ MoteusHwPins FindHardwarePins(FamilyAndVersion);
 //   they are populated in MoteusHwPins.
 
 #define MOTEUS_MODEL_NUMBER 0x0000
-#define MOTEUS_FIRMWARE_VERSION 0x00010f
+#define MOTEUS_FIRMWARE_VERSION 0x00010e
 
 extern MoteusHwPins g_hw_pins;
 
