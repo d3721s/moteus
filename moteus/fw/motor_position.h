@@ -550,6 +550,9 @@ class MotorPosition {
           } else if (mode == M::kMt6835 ||
                      mode == M::kOnboardMt6835) {
             source_config.cpr = 2097152;
+          } else if (mode == M::kKth7812 ||
+                     mode == M::kOnboardKth7812) {
+            source_config.cpr = 65536;
           } else if (mode == M::kIcPz) {
             source_config.cpr = 16777216;
           } else if (mode == M::kOrbis) {

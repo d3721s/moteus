@@ -349,6 +349,13 @@ MoteusHwPins FindHardwarePins(FamilyAndVersion fv) {
     result.mt6835_miso = PF_0;
     result.mt6835_sck = PF_1;
 
+    result.kth7812_cs = PC_5;
+    result.kth7812_mosi = PA_7;
+    result.kth7812_miso = PB_4;
+    result.kth7812_sck = PA_5;
+    result.kth7812_mgh = PC_1;
+    result.kth7812_mgl = PC_3;
+
     result.can_td = PB_6;
     result.can_rd = PB_5;
 

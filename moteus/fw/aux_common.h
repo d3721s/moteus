@@ -44,6 +44,8 @@ struct Spi {
       kOrbis,
       kMt6835,
       kOnboardMt6835,
+      kKth7812,
+      kOnboardKth7812,
 
       kNumModes,
     };
@@ -81,6 +83,8 @@ struct Spi {
     uint8_t ic_pz_bits = 0;
 
     uint16_t checksum_errors = 0;
+    bool magnetic_field_high = false;
+    bool magnetic_field_low = false;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -89,6 +93,8 @@ struct Spi {
       a->Visit(MJ_NVP(nonce));
       a->Visit(MJ_NVP(ic_pz_bits));
       a->Visit(MJ_NVP(checksum_errors));
+      a->Visit(MJ_NVP(magnetic_field_high));
+      a->Visit(MJ_NVP(magnetic_field_low));
     }
   };
 };
@@ -560,6 +566,8 @@ struct IsEnum<moteus::aux::Spi::Config::Mode> {
         { M::kOrbis, "orbis" },
         { M::kMt6835, "mt6835" },
         { M::kOnboardMt6835, "onboard_mt6835" },
+        { M::kKth7812, "kth7812" },
+        { M::kOnboardKth7812, "onboard_kth7812" },
       }};
   }
 };

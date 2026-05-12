@@ -68,6 +68,13 @@ struct MoteusHwPins {
   PinName mt6835_miso = NC;
   PinName mt6835_sck = NC;
 
+  PinName kth7812_cs = NC;
+  PinName kth7812_mosi = NC;
+  PinName kth7812_miso = NC;
+  PinName kth7812_sck = NC;
+  PinName kth7812_mgh = NC;
+  PinName kth7812_mgl = NC;
+
   PinName can_td = NC;
   PinName can_rd = NC;
 
@@ -186,9 +193,15 @@ MoteusHwPins FindHardwarePins(FamilyAndVersion);
 // * servo.pid_dq.kp/ki/max_desired_rate replaced by servo.pid_dq_hz
 //   and servo.max_current_desired_rate.  PI gains are now computed
 //   automatically from the bandwidth and motor parameters.
+//
+// # 0x010f #
+//
+// * Added KTH7812 SPI encoder mode and magnetic field status.
+// * family 1/2/3 board default SPI now prefers the KTH7812 pins when
+//   they are populated in MoteusHwPins.
 
 #define MOTEUS_MODEL_NUMBER 0x0000
-#define MOTEUS_FIRMWARE_VERSION 0x00010e
+#define MOTEUS_FIRMWARE_VERSION 0x00010f
 
 extern MoteusHwPins g_hw_pins;
 

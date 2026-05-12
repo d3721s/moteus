@@ -131,6 +131,7 @@ MOTEUS_SOURCES = [
     "firmware_info.h",
     "firmware_info.cc",
     "ic_pz.h",
+    "kth7812.h",
     "ma732.h",
     "mt6835.h",
     "orbis.h",
