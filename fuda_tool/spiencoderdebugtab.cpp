@@ -32,6 +32,7 @@ namespace
 constexpr int DefaultBaudrate = 460800;
 constexpr int DefaultSpiDividerCode = 5; // 64 分频
 constexpr int DefaultTimeoutMs = 200;
+constexpr int ControlTimeoutMs = 1000;
 constexpr int MaxLogBlockCount = 2000;
 constexpr int MaxSamplingPoints = 1200;
 
@@ -43,6 +44,15 @@ QByteArray makeByteArray(std::initializer_list<int> values)
         bytes.append(char(value & 0xFF));
     }
     return bytes;
+}
+
+QByteArray mt68xxRxToBigEndian(const QByteArray &rx)
+{
+    QByteArray converted = rx;
+    if (converted.size() >= 5) {
+        std::reverse(converted.begin() + 2, converted.begin() + 5);
+    }
+    return converted;
 }
 
 struct SeriesData
@@ -650,13 +660,13 @@ bool SpiEncoderDebugTab::applySpiConfig(int masterSlave, int mode, int dividerCo
     if (!sendCommand(0x02,
                      makeByteArray({0x00, masterSlave, mode, dividerCode}),
                      0x02,
-                     DefaultTimeoutMs,
+                     ControlTimeoutMs,
                      &response,
                      error)) {
         return false;
     }
 
-    if (!sendCommand(0x0B, makeByteArray({0x00, bitOrderValue}), 0x0B, DefaultTimeoutMs, &response, error)) {
+    if (!sendCommand(0x0B, makeByteArray({0x00, bitOrderValue}), 0x0B, ControlTimeoutMs, &response, error)) {
         return false;
     }
     return true;
@@ -665,7 +675,7 @@ bool SpiEncoderDebugTab::applySpiConfig(int masterSlave, int mode, int dividerCo
 bool SpiEncoderDebugTab::querySpiConfig(QString *summary, QString *error)
 {
     DebugFrame response;
-    if (!sendCommand(0x02, makeByteArray({0x01}), 0x02, DefaultTimeoutMs, &response, error)) {
+    if (!sendCommand(0x02, makeByteArray({0x01}), 0x02, ControlTimeoutMs, &response, error)) {
         return false;
     }
     if (response.payload.size() < 4) {
@@ -679,7 +689,7 @@ bool SpiEncoderDebugTab::querySpiConfig(QString *summary, QString *error)
     const int divider = quint8(response.payload.at(3));
 
     DebugFrame bitResponse;
-    if (!sendCommand(0x0B, makeByteArray({0x01, 0x00}), 0x0B, DefaultTimeoutMs, &bitResponse, error)) {
+    if (!sendCommand(0x0B, makeByteArray({0x01, 0x00}), 0x0B, ControlTimeoutMs, &bitResponse, error)) {
         return false;
     }
     if (bitResponse.payload.size() < 2) {
@@ -704,17 +714,18 @@ bool SpiEncoderDebugTab::querySpiConfig(QString *summary, QString *error)
 
 bool SpiEncoderDebugTab::setCsLevel(bool high, QString *error)
 {
-    return sendCommandNoResponse(0x03, makeByteArray({0x00, high ? 1 : 0}), DefaultTimeoutMs, error);
+    DebugFrame response;
+    return sendCommand(0x03, makeByteArray({0x00, high ? 1 : 0}), 0x03, ControlTimeoutMs, &response, error);
 }
 
-bool SpiEncoderDebugTab::spiTransfer(const QByteArray &tx, QByteArray *rx, QString *error)
+bool SpiEncoderDebugTab::spiTransfer(const QByteArray &tx, QByteArray *rx, int timeoutMs, QString *error)
 {
     DebugFrame response;
     QByteArray payload;
     payload.reserve(tx.size() + 1);
     payload.append(char(tx.size() & 0xFF));
     payload.append(tx);
-    if (!sendCommand(0x04, payload, 0x05, DefaultTimeoutMs, &response, error)) {
+    if (!sendCommand(0x04, payload, 0x05, timeoutMs, &response, error)) {
         return false;
     }
     if (response.payload.isEmpty()) {
@@ -742,14 +753,13 @@ bool SpiEncoderDebugTab::performSpiTransaction(const QByteArray &tx,
                                                bool autoToggleCs,
                                                QString *error)
 {
-    Q_UNUSED(timeoutMs)
     if (autoToggleCs) {
         if (!setCsLevel(false, error)) {
             return false;
         }
     }
 
-    const bool ok = spiTransfer(tx, rx, error);
+    const bool ok = spiTransfer(tx, rx, timeoutMs, error);
 
     if (autoToggleCs) {
         QString csError;
@@ -821,35 +831,6 @@ bool SpiEncoderDebugTab::sendCommand(quint8 cmd,
         *error = QStringLiteral("无响应");
     }
     return false;
-}
-
-bool SpiEncoderDebugTab::sendCommandNoResponse(quint8 cmd,
-                                               const QByteArray &payload,
-                                               int timeoutMs,
-                                               QString *error)
-{
-    if (!m_serial->isOpen()) {
-        if (error) {
-            *error = QStringLiteral("串口未打开");
-        }
-        return false;
-    }
-
-    const QByteArray frame = buildFrame(cmd, payload);
-    if (m_serial->write(frame) != frame.size()) {
-        if (error) {
-            *error = QStringLiteral("串口写入失败: %1").arg(m_serial->errorString());
-        }
-        return false;
-    }
-    if (!m_serial->waitForBytesWritten(timeoutMs)) {
-        if (error) {
-            *error = QStringLiteral("写入超时");
-        }
-        return false;
-    }
-    appendProtoLog(QStringLiteral("TX"), frame);
-    return true;
 }
 
 bool SpiEncoderDebugTab::readFrame(DebugFrame *frame, int timeoutMs, QString *error)
@@ -960,15 +941,6 @@ QByteArray SpiEncoderDebugTab::buildFrame(quint8 cmd, const QByteArray &payload)
     }
     frame[frame.size() - 2] = char(xorValue);
     return frame;
-}
-
-quint8 SpiEncoderDebugTab::xorChecksum(const QByteArray &frameWithoutChecksum)
-{
-    quint8 value = 0;
-    for (char byte : frameWithoutChecksum) {
-        value ^= quint8(byte);
-    }
-    return value;
 }
 
 QString SpiEncoderDebugTab::bytesToHex(const QByteArray &bytes)
@@ -1288,7 +1260,6 @@ SpiEncoderDebugTab::EncoderReadResult SpiEncoderDebugTab::readMt6826()
         result.errorText = error;
         return result;
     }
-    result.rxHex = bytesToHex(rx);
     if (allBytesEqual(rx, 0x00)) {
         result.errorText = QStringLiteral("全0");
         return result;
@@ -1302,8 +1273,9 @@ SpiEncoderDebugTab::EncoderReadResult SpiEncoderDebugTab::readMt6826()
         return result;
     }
 
-    const quint32 raw15 = (quint32(quint8(rx.at(2))) << 7) | (quint32(quint8(rx.at(3))) >> 1);
-    const quint8 status = quint8(rx.at(4)) & 0x07;
+    const QByteArray beRx = mt68xxRxToBigEndian(rx);
+    const quint32 raw15 = (quint32(quint8(beRx.at(2))) << 7) | (quint32(quint8(beRx.at(3))) >> 1);
+    const quint8 status = quint8(beRx.at(4)) & 0x07;
     result.raw = raw15;
     result.angleDeg = double(raw15) * 360.0 / 32768.0;
     result.statusText = status == 0 ? QStringLiteral("正常") : QStringLiteral("状态报警:0x%1").arg(status, 1, 16).toUpper();
@@ -1320,7 +1292,6 @@ SpiEncoderDebugTab::EncoderReadResult SpiEncoderDebugTab::readMt6835()
         result.errorText = error;
         return result;
     }
-    result.rxHex = bytesToHex(rx);
     if (allBytesEqual(rx, 0x00)) {
         result.errorText = QStringLiteral("全0");
         return result;
@@ -1334,8 +1305,9 @@ SpiEncoderDebugTab::EncoderReadResult SpiEncoderDebugTab::readMt6835()
         return result;
     }
 
-    if (rx.size() >= 6) {
-        const quint8 expectedCrc = crc8_07(rx.mid(2, 3));
+    const QByteArray beRx = mt68xxRxToBigEndian(rx);
+    if (beRx.size() >= 6) {
+        const quint8 expectedCrc = crc8_07(beRx.mid(2, 3));
         const quint8 recvCrc = quint8(rx.at(5));
         if (expectedCrc != recvCrc) {
             result.errorText = QStringLiteral("CRC错误");
@@ -1343,8 +1315,8 @@ SpiEncoderDebugTab::EncoderReadResult SpiEncoderDebugTab::readMt6835()
         }
     }
 
-    const quint32 raw21 = (quint32(quint8(rx.at(2))) << 13) | (quint32(quint8(rx.at(3))) << 5) | (quint32(quint8(rx.at(4))) >> 3);
-    const quint8 status = quint8(rx.at(4)) & 0x07;
+    const quint32 raw21 = (quint32(quint8(beRx.at(2))) << 13) | (quint32(quint8(beRx.at(3))) << 5) | (quint32(quint8(beRx.at(4))) >> 3);
+    const quint8 status = quint8(beRx.at(4)) & 0x07;
     result.raw = raw21;
     result.angleDeg = double(raw21) * 360.0 / 2097152.0;
     result.statusText = status == 0 ? QStringLiteral("正常") : QStringLiteral("状态报警:0x%1").arg(status, 1, 16).toUpper();
@@ -1362,7 +1334,6 @@ SpiEncoderDebugTab::EncoderReadResult SpiEncoderDebugTab::readMa600()
         result.errorText = error;
         return result;
     }
-    result.rxHex = bytesToHex(rx);
     if (allBytesEqual(rx, 0x00)) {
         result.errorText = QStringLiteral("全0");
         return result;
@@ -1394,7 +1365,6 @@ SpiEncoderDebugTab::EncoderReadResult SpiEncoderDebugTab::readKth7812(bool crc4)
         result.errorText = error;
         return result;
     }
-    result.rxHex = bytesToHex(rx);
     if (allBytesEqual(rx, 0x00)) {
         result.errorText = QStringLiteral("全0");
         return result;

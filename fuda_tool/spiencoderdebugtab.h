@@ -55,7 +55,6 @@ private:
         quint32 raw = 0;
         QString statusText;
         QString errorText;
-        QString rxHex;
     };
 
     QWidget *createConnectionGroup();
@@ -73,7 +72,7 @@ private:
     bool applySpiConfig(int masterSlave, int mode, int dividerCode, int bitOrderValue, QString *error);
     bool querySpiConfig(QString *summary, QString *error);
     bool setCsLevel(bool high, QString *error);
-    bool spiTransfer(const QByteArray &tx, QByteArray *rx, QString *error);
+    bool spiTransfer(const QByteArray &tx, QByteArray *rx, int timeoutMs, QString *error);
     bool performSpiTransaction(const QByteArray &tx,
                                QByteArray *rx,
                                int timeoutMs,
@@ -86,15 +85,10 @@ private:
                      int timeoutMs,
                      DebugFrame *response,
                      QString *error);
-    bool sendCommandNoResponse(quint8 cmd,
-                               const QByteArray &payload,
-                               int timeoutMs,
-                               QString *error);
     bool readFrame(DebugFrame *frame, int timeoutMs, QString *error);
     bool tryExtractFrame(DebugFrame *frame, QString *error);
 
     static QByteArray buildFrame(quint8 cmd, const QByteArray &payload);
-    static quint8 xorChecksum(const QByteArray &frameWithoutChecksum);
     static QString bytesToHex(const QByteArray &bytes);
     static bool parseHexText(const QString &text, QByteArray *out, QString *error);
     static bool allBytesEqual(const QByteArray &data, char value);
