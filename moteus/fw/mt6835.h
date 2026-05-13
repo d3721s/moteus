@@ -17,7 +17,6 @@
 #include "mbed.h"
 
 #include "fw/ccm.h"
-#include "fw/stm32_digital_monitor.h"
 #include "fw/stm32_digital_output.h"
 #include "fw/stm32_spi.h"
 
