@@ -16,10 +16,7 @@
 
 package(default_visibility=["//visibility:public"])
 load("@com_github_ARMmbed_mbed-g4//:rules.bzl", g4_mbed_binary="mbed_binary")
-load(
-    "@com_github_ARMmbed_mbed-g4-bootloader//:rules.bzl",
-    g4_bootloader_mbed_binary="mbed_binary",
-)
+load("@com_github_ARMmbed_mbed-g4-bootloader//:rules.bzl", g4_bootloader_mbed_binary = "mbed_binary")
 
 COPTS = [
     "-Werror",
@@ -148,7 +145,6 @@ MOTEUS_SOURCES = [
     "stm32g4_dma_uart.h",
     "stm32_bitbang_spi.h",
     "stm32_digital_output.h",
-    "stm32_digital_monitor.h",
     "stm32_gpio_interrupt_in.h",
     "stm32_gpio_interrupt_in.cc",
     "stm32_i2c.h",
@@ -218,17 +214,18 @@ genrule(
     output_to_bindir=True,
 )
 
-OCD_G4 = "openocd " + "-f interface/stlink.cfg " + "-f target/stm32g4x.cfg "
+OCD_G4 = (
+    "openocd " +
+    "-f interface/stlink.cfg " +
+    "-f target/stm32g4x.cfg "
+)
 
 genrule(
     name="flash",
     tags=["manual"],
     srcs=["moteus.08000000.bin", "moteus.0800c000.bin", "moteus.08010000.bin"],
     outs=["flash.stamp"],
-    cmd=(
-        OCD_G4
-        + ' -c init -c "reset_config none separate; program $(location moteus.08000000.bin) verify 0x8000000; program $(location moteus.0800c000.bin) verify 0x800c000; program $(location moteus.08010000.bin) verify reset exit 0x08010000" && touch $@'
-    ),
+    cmd = (OCD_G4 + " -c init -c \"reset_config none separate; program $(location moteus.08000000.bin) verify 0x8000000; program $(location moteus.0800c000.bin) verify 0x800c000; program $(location moteus.08010000.bin) verify reset exit 0x08010000\" && touch $@"),
 )
 
 cc_test(
