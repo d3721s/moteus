@@ -33,10 +33,9 @@ class MT6835 {
   };
 
   MT6835(const Options& options)
-      : miso_input_(options.miso),
+      : miso_(options.miso),
         cs_(options.cs, 1),
         mosi_(options.mosi, 0),
-        miso_(options.miso),
         sck_(options.sck, 1) {
   }
 
@@ -110,10 +109,9 @@ class MT6835 {
   static constexpr uint8_t kBurstReadAngle0 = 0xa0;
   static constexpr uint8_t kBurstReadAngle1 = 0x03;
 
-  DigitalIn miso_input_;
+  DigitalIn miso_;
   Stm32DigitalOutput cs_;
   Stm32DigitalOutput mosi_;
-  Stm32DigitalMonitor miso_;
   Stm32DigitalOutput sck_;
   uint8_t rx_[6] = {};
 };
