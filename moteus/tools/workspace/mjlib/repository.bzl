@@ -22,5 +22,5 @@ def mjlib_repository(name):
         name=name,
         repo="d3721s/mjlib",
         commit="dcba2c4d4c3e936948e53259d2107c03e4b3a653",
-        sha256="eddf21a8100d36b8683acdfb0e41144549b71a930a7587e2db5af23ee96fe7bf",
+        sha256="eeff01ba118def5583653e302b732b72982f274b6f4b5c3a8f9b9c440e7828ad",
     )
