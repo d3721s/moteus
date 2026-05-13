@@ -1472,3 +1472,46 @@ BOOST_AUTO_TEST_CASE(MotorPositionVariableTimestep) {
     }
   }
 }
+
+// Regression test for the i2c_device clamp.  An out-of-range
+// i2c_device on a kI2C source must not be left at one-past-the-end
+// after HandleConfigUpdate, since the same function then dereferences
+// aux_config->i2c.devices[source_config.i2c_device] and
+// ISR_UpdateSources does the same on every cycle.  Without the clamp
+// fix this assertion catches the off-by-one (clamped value == 3 for
+// a 3-entry array).
+BOOST_AUTO_TEST_CASE(MotorPositionI2cDeviceClamp) {
+  Context ctx;
+
+  ctx.dut.config()->sources[0].type = MotorPosition::SourceConfig::kI2C;
+  ctx.dut.config()->sources[0].aux_number = 1;
+  ctx.dut.config()->sources[0].i2c_device = 7;
+
+  // Force HandleConfigUpdate to run with the bad i2c_device.
+  ctx.pcf.persistent_config.Load();
+
+  // The clamped value must be a valid index into the 3-entry array.
+  const auto clamped = ctx.dut.config()->sources[0].i2c_device;
+  BOOST_TEST(clamped < ctx.aux1_status.i2c.devices.size());
+
+  // Run an ISR cycle so that ISR_UpdateSources also exercises the
+  // clamped index in the kI2C branch.
+  ctx.aux1_status.i2c.devices[0].active = true;
+  ctx.aux1_status.i2c.devices[0].nonce = 1;
+  ctx.aux1_status.i2c.devices[0].value = 0;
+  ctx.dut.ISR_Update();
+}
+
+// An out-of-range output.reference_source must be rejected at config
+// update time rather than dereferenced.  HandleConfigUpdate previously
+// clamped to config_.sources.size() — itself one past the last valid
+// index — and then read sources[that_index].
+BOOST_AUTO_TEST_CASE(MotorPositionReferenceSourceOutOfRange) {
+  Context ctx;
+
+  ctx.dut.config()->output.reference_source = 5;
+
+  ctx.pcf.persistent_config.Load();
+
+  BOOST_TEST(ctx.dut.status().error == MotorPosition::Status::kInvalidConfig);
+}

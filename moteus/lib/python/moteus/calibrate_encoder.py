@@ -396,7 +396,7 @@ def calibrate(parsed,
 
         if not optimres.success:
             result.errors.append(
-                f"optimization failed {result.message}")
+                f"optimization failed {optimres.message}")
 
         print()
         offset = list(optimres.x)

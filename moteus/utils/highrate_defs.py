@@ -108,7 +108,7 @@ class PlotConfig:
 
         # Only include records whose sync byte is valid.
         return [s.unpack(data[i:i+s.size])
-                for i in range(0, len(data) - s.size, s.size)
+                for i in range(0, len(data) - s.size + 1, s.size)
                 if data[i] == 0x5a]
 
     def scaled_fields(self, parsed):

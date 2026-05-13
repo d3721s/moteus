@@ -965,7 +965,7 @@ class Controller {
 
           t->Post(
               std::bind(
-                  callback, !options_.default_query ? 0 :
+                  callback, !output_frame_.reply_required ? 0 :
                   !!maybe_result ? 0 : ETIMEDOUT));
         });
   }

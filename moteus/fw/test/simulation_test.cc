@@ -1182,4 +1182,119 @@ BOOST_AUTO_TEST_CASE(SimFieldWeakeningIdADecaysToZero) {
       "Still reporting kLimitFieldWeakening after stop");
 }
 
+struct TorqueZeroEntry {
+  float peak_abs_torque_Nm = 0.0f;
+  float peak_abs_q_A = 0.0f;
+  float signed_peak_torque_Nm = 0.0f;
+  float signed_peak_q_A = 0.0f;
+};
+
+inline TorqueZeroEntry RunTorqueZeroEntry(
+    SimulationContext& ctx,
+    SimulatedFixture& fixture,
+    float target_speed,
+    float bemf_feedforward,
+    float accel_limit = kNaN) {
+  ctx.config_.bemf_feedforward = bemf_feedforward;
+  // The bemf_feedforward sanity check requires either an accel_limit
+  // or an explicit override.  We never set the override -- that's
+  // exactly the configuration we want to exercise.
+
+  fixture.config().kp = 0.0f;
+  fixture.config().ki = 0.0f;
+  fixture.config().kd = 5.0f;     // damping only (no position lock)
+  fixture.config().ilimit = 0.0f;
+  fixture.config().max_torque_Nm = 5.0f;
+
+  auto stop_cmd = BldcServoCommandData{};
+  stop_cmd.mode = kStopped;
+  stop_cmd.timeout_s = kNaN;
+  ctx.Command(&stop_cmd);
+
+  fixture.MoveAtVelocity(target_speed);
+  ctx.RunWithFixture(&stop_cmd, &fixture, 0.5f);
+
+  BOOST_REQUIRE_MESSAGE(
+      std::abs(ctx.motor_sim_.velocity_rev_s() - target_speed) < 1.0f,
+      "Fixture failed to spin motor up: v="
+          << ctx.motor_sim_.velocity_rev_s());
+
+  auto torque_cmd = MakePositionCommand(kNaN, 0.0f, 5.0f);
+  torque_cmd.kp_scale = 0.0f;
+  torque_cmd.kd_scale = 0.0f;
+  torque_cmd.feedforward_Nm = 0.0f;
+  torque_cmd.accel_limit = accel_limit;
+  ctx.Command(&torque_cmd);
+
+  TorqueZeroEntry result;
+  // 600 cycles @ 30 kHz = 20 ms — covers several current-loop time
+  // constants (1/(2*pi*400) ≈ 0.4 ms).
+  constexpr int kSamples = 600;
+  for (int i = 0; i < kSamples; ++i) {
+    ctx.StepWithFixture(&torque_cmd, &fixture);
+    const float t_em = ctx.motor_sim_.torque_em();
+    if (std::abs(t_em) > result.peak_abs_torque_Nm) {
+      result.peak_abs_torque_Nm = std::abs(t_em);
+      result.signed_peak_torque_Nm = t_em;
+    }
+    const float q = ctx.status_.q_A;
+    if (std::abs(q) > result.peak_abs_q_A) {
+      result.peak_abs_q_A = std::abs(q);
+      result.signed_peak_q_A = q;
+    }
+  }
+  return result;
+}
+
+// Verify that no discontiuity is present when initializing control of
+// a moving system when `servo.bemf_feedforward=0.0`.
+BOOST_AUTO_TEST_CASE(SimEnableTorqueModeAtSpeedPulse) {
+  const float target_speed = 8.0f;  // rev/s
+  const auto r = RunTorqueZeroEntry(ctx, fixture, target_speed, 0.0f);
+
+  std::cout << "EnableTorqueMode (bemf_ff=0): "
+            << "torque=" << r.signed_peak_torque_Nm
+            << " Nm  q_A=" << r.signed_peak_q_A
+            << " A  final_v=" << ctx.motor_sim_.velocity_rev_s()
+            << std::endl;
+
+  // The user requested 0 Nm.  The entry transient is bounded by the
+  // cogging / current-sense floor and a small overshoot from the Kv
+  // model mismatch.
+  BOOST_CHECK_MESSAGE(
+      r.peak_abs_torque_Nm < 0.05f,
+      "Torque pulse on entry to k=d=f=0 at v=" << target_speed
+          << " rev/s (bemf_ff=0): torque=" << r.signed_peak_torque_Nm
+          << " Nm q_A=" << r.signed_peak_q_A << " A");
+}
+
+// Same scenario as SimEnableTorqueModeAtSpeedPulse but with
+// bemf_feedforward = 1.0.
+//
+// With an accel_limit, the trajectory smoothly ramps
+// control_velocity from the rotor's actual velocity (captured at
+// mode entry) down to the commanded 0, and the BEMF feedforward
+// voltage tracks that smoothly.
+BOOST_AUTO_TEST_CASE(SimEnableTorqueModeAtSpeedPulseBemfFf) {
+  const float target_speed = 8.0f;  // rev/s
+  // accel_limit chosen large enough to ramp 8 rev/s to 0 in well
+  // under our 20 ms sampling window.
+  const float accel_limit = 200.0f;  // rev/s^2
+  const auto r = RunTorqueZeroEntry(ctx, fixture, target_speed, 1.0f,
+                                    accel_limit);
+
+  std::cout << "EnableTorqueMode (bemf_ff=1, accel="
+            << accel_limit << "): "
+            << "torque=" << r.signed_peak_torque_Nm
+            << " Nm  q_A=" << r.signed_peak_q_A
+            << " A  final_v=" << ctx.motor_sim_.velocity_rev_s()
+            << std::endl;
+
+  BOOST_CHECK_MESSAGE(
+      r.peak_abs_torque_Nm < 0.05f,
+      "Torque pulse on entry to k=d=f=0 at v=" << target_speed
+          << " rev/s (bemf_ff=1): torque=" << r.signed_peak_torque_Nm
+          << " Nm q_A=" << r.signed_peak_q_A << " A");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

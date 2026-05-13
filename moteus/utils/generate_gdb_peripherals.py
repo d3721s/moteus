@@ -96,7 +96,7 @@ DMA_CHANNELS = {
 
 # Peripherals to skip (not useful or no C type available)
 SKIP_PERIPHERALS = {
-    'MPU', 'NVIC', 'NVIC_STIR', 'SCB', 'SCB_ACTRL', 'STK', 'FPU', 'FPU_CPACR',
+    'MPU', 'NVIC', 'NVIC_STIR', 'SCB', 'SCB_ACTLR', 'STK', 'FPU', 'FPU_CPACR',
 }
 
 

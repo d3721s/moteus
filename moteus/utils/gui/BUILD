@@ -23,6 +23,7 @@ test_suite(
     name = "host",
     tests = [
         ":bdist_test",
+        "//utils/gui/moteus_gui:python_console_ast_test",
     ],
 )
 

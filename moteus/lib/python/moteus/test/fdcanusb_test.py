@@ -92,6 +92,47 @@ class FdcanusbTest(FdcanusbTestBase):
 
         self.run_async(test())
 
+    def test_extra_subscribed_frame_wakes_receiver(self):
+        # Regression test: when a transaction's frame_filter matches
+        # more than one rcv line, the first becomes the request's
+        # response and the rest must be appended to _receive_queue
+        # AND wake any pending receive_frame() waiter.  Without the
+        # fix the waiter stays parked even though a frame is sitting
+        # in the queue.
+        async def test():
+            async with fdcanusb.FdcanusbDevice() as dut:
+                self.mock_serial.queue_response(b"OK\n")
+
+                def queue_responses(serial, data):
+                    # Two frames both match the filter; the second is
+                    # the "extra" that the buggy handler used to drop
+                    # without notifying.
+                    serial.add_response(b"rcv 0185 240401 F\n")
+                    serial.add_response(b"rcv 0185 240402 F\n")
+
+                self.mock_serial.add_write_hook(
+                    b'can send 0105', queue_responses)
+
+                # Park a receive_frame() waiter before the
+                # transaction runs.
+                recv_task = asyncio.create_task(dut.receive_frame())
+
+                # Give the waiter a chance to actually park.
+                await asyncio.sleep(0)
+
+                request = TransportDevice.Request(
+                    frame=fdcanusb.Frame(0x105, b'4567'),
+                    frame_filter=lambda f: f.arbitration_id == 0x185)
+
+                await dut.transaction([request])
+
+                # The extra matching frame must reach the parked waiter.
+                extra = await asyncio.wait_for(recv_task, timeout=1.0)
+                self.assertEqual(extra.arbitration_id, 0x185)
+                self.assertEqual(extra.data, b'\x24\x04\x02')
+
+        self.run_async(test())
+
 
 class FdcanusbTimeoutRetryTest(FdcanusbTestBase):
     """Tests for FdcanusbDevice timeout and retry behavior."""

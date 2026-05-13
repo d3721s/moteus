@@ -101,7 +101,10 @@ def format_reg(reg):
     try:
         typedreg = moteus.Register(reg)
         return f'0x{reg:03x}({typedreg.name})'
-    except TypeError:
+    except (TypeError, ValueError):
+        # ValueError: register number not in the moteus.Register enum
+        # (e.g. a WRITE_ERROR/READ_ERROR reporting an unknown
+        # register, or a capture from a newer firmware).
         return f'0x{reg:03x}'
 
 def IsNan(typecode, value):

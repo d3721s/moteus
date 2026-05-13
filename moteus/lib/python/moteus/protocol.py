@@ -404,8 +404,13 @@ def scale_register(register, resolution, value):
     elif register == Register.COMMAND_WITHIN_ILIMIT_SCALE:
         return _scale_mapped(value, resolution, 1.0 / 127.0, 1.0 / 32767.0, 1.0 / 2147483647.0)
     else:
-        # Unknown register, return raw value with NaN handling
-        return _nanify(value, resolution)
+        # Unknown register: assume raw integer with no NaN sentinel.
+        # _nanify only applies to scaled fixed-point registers
+        # (firmware writes numeric_limits<T>::min() for non-finite
+        # scaled values).  Unscaled integer registers like UUID*,
+        # MODEL_NUMBER, *_VERSION, DRIVER_FAULT*, etc. carry valid
+        # bit patterns at every value, including 0x80000000.
+        return value
 
 
 class ParsedRegisters(NamedTuple):

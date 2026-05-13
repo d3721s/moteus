@@ -27,10 +27,6 @@ import asyncio
 import sys
 
 
-# Unique sentinel to identify our timeout cancellations
-_TIMEOUT_SENTINEL = "_moteus_timeout_expired"
-
-
 class Timeout:
     """Async context manager for operation timeouts.
 
@@ -51,6 +47,9 @@ class Timeout:
         self._task = None
         self._timeout_handle = None
         self._cancelled_by_timeout = False
+        # Per-instance sentinel so nested Timeout blocks can each
+        # recognize only the cancellations they themselves issued.
+        self._sentinel = f"_moteus_timeout_expired:{id(self)}"
 
     async def __aenter__(self):
         if self._delay is None:
@@ -78,7 +77,7 @@ class Timeout:
                 # On 3.9+, check the cancel message for our sentinel
                 # to avoid misattributing an external cancel as a timeout.
                 if (getattr(exc_val, 'args', ()) and
-                    exc_val.args[0] == _TIMEOUT_SENTINEL):
+                    exc_val.args[0] == self._sentinel):
                     raise asyncio.TimeoutError() from exc_val
             elif self._cancelled_by_timeout:
                 # Pre-3.9, best effort using the flag
@@ -92,7 +91,7 @@ class Timeout:
         self._cancelled_by_timeout = True
         # Use cancel message if available (Python 3.9+)
         if sys.version_info >= (3, 9):
-            self._task.cancel(_TIMEOUT_SENTINEL)
+            self._task.cancel(self._sentinel)
         else:
             self._task.cancel()
 

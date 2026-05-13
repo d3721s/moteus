@@ -16,9 +16,17 @@
 
 package(default_visibility = ["//visibility:public"])
 
-py_binary(
-    name = "calibrate_encoder",
-    srcs = ["calibrate_encoder.py"],
+py_library(
+    name = "encoder_math",
+    srcs = ["encoder_math.py"],
+    imports = ["."],
+)
+
+py_test(
+    name = "encoder_math_test",
+    srcs = ["test/encoder_math_test.py"],
+    deps = [":encoder_math"],
+    size = "small",
 )
 
 py_binary(
@@ -49,7 +57,6 @@ cc_test(
     ],
     data = [
         # Just so they are built.
-        ":calibrate_encoder",
         ":dynamometer_drive",
         ":dyno_static_torque_ripple",
         ":firmware_validate",
@@ -111,6 +118,7 @@ test_suite(
     name = "host",
     tests = [
         "test",
+        "encoder_math_test",
         "mpat_test",
         "firmware_validate",
         "//utils/gui:host",

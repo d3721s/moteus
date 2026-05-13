@@ -174,11 +174,13 @@ async def run_test(args, c):
         start_time, start_data = trace[start_index]
 
         delta_time = end_time - start_time
+        start_velocity = start_data.values[moteus.Register.VELOCITY]
         end_velocity = end_data.values[moteus.Register.VELOCITY]
 
-        accel = end_velocity / delta_time
+        accel = (end_velocity - start_velocity) / delta_time
 
-        print(f"end_velocity={end_velocity} delta_time={delta_time} accel={accel}")
+        print(f"start_velocity={start_velocity} end_velocity={end_velocity} "
+              f"delta_time={delta_time} accel={accel}")
 
         return accel
 

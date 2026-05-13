@@ -61,7 +61,7 @@ class AioSerial:
 
     @loop.setter
     def loop(self, value: Optional[asyncio.AbstractEventLoop]):
-        self.loop = value
+        self._loop = value
 
     def __enter__(self):
         return self

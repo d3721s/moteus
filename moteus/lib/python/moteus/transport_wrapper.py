@@ -22,8 +22,14 @@ class TransportWrapper:
     """Compatibility base class to implement old-style transports with
     a new TransportDevice."""
 
-    def __init__(self, devices, routing_table={}):
-        self._transport = Transport(devices, routing_table=routing_table)
+    def __init__(self, devices, routing_table=None):
+        # Don't share a mutable default across instances.  Discovery
+        # populates this dict in-place, so a shared default leaks
+        # routing entries between TransportWrappers in the same
+        # process.
+        self._transport = Transport(
+            devices,
+            routing_table={} if routing_table is None else routing_table)
 
     async def __aenter__(self):
         return self

@@ -333,7 +333,10 @@ class TimeoutTransport : public Transport {
                    std::vector<CanFdFrame>* replies,
                    CompletionCallback completed_callback) {
     if (replies) { replies->clear(); }
-    CHILD_CheckReplies(replies, kFlush, 0, nullptr);
+    // The flush exists to drop bytes left over from a previous
+    // cycle; pass nullptr so any stale frames are parsed and
+    // discarded rather than appended into the caller's vector.
+    CHILD_CheckReplies(nullptr, kFlush, 0, nullptr);
 
     const auto advance = t_options_.max_pipeline < 0 ?
         size : t_options_.max_pipeline;
@@ -1009,8 +1012,10 @@ class Fdcanusb : public details::TimeoutTransport {
                        CompletionCallback completed_callback) {
     if (replies) { replies->clear(); }
 
-    // Flush any stale data.
-    CHILD_CheckReplies(replies, kFlush, 0, nullptr);
+    // Flush any stale data.  Pass nullptr so anything still buffered
+    // is consumed and dropped rather than appended into the caller's
+    // vector as if it were a response to the new cycle.
+    CHILD_CheckReplies(nullptr, kFlush, 0, nullptr);
 
     for (size_t i = 0; i < size; i++) {
       const auto& frame = frames[i];

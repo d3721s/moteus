@@ -35,7 +35,37 @@ BOOST_AUTO_TEST_CASE(TimingTest1) {
   BOOST_TEST(result.scldel == 8);
   BOOST_TEST(result.sclh == 147);
   BOOST_TEST(result.scll == 172);
-  BOOST_TEST(result.timingr == 0x108993ac);
+  // sdadel=10 (was 9 before the ceiling fix); the hold time at
+  // sdadel=9 is 296.875 ns, below the 300 ns Standard-mode minimum.
+  BOOST_TEST(result.sdadel == 10);
+  BOOST_TEST(result.timingr == 0x108a93ac);
+}
+
+// Regression test: across the supported range of peripheral clocks
+// and Standard mode, the realised hardware SDA hold time
+// (tSDADEL = SDADEL * tPRESC + tI2CCLK, per RM0440) must meet the
+// 300 ns NXP Standard-mode minimum referenced in stm32_i2c_timing.h.
+BOOST_AUTO_TEST_CASE(StandardModeHoldTimeMeetsMinimum) {
+  for (const int peripheral_hz : {64000000, 85000000, 128000000, 170000000}) {
+    TimingInput input;
+    input.peripheral_hz = peripheral_hz;
+    input.i2c_hz = 100000;
+    input.i2c_mode = I2cMode::kStandard;
+    input.analog_filter = AnalogFilter::kOff;
+
+    const auto result = CalculateI2cTiming(input);
+    BOOST_TEST_REQUIRE(result.error == 0);
+
+    const int64_t t_i2cclk_ps = 1000000000000ll / peripheral_hz;
+    const int64_t t_presc_ps = t_i2cclk_ps * (result.prescaler + 1);
+    const int64_t actual_hold_ps =
+        static_cast<int64_t>(result.sdadel) * t_presc_ps + t_i2cclk_ps;
+    BOOST_TEST(actual_hold_ps >= 300000,
+               "peripheral_hz=" << peripheral_hz
+               << " sdadel=" << result.sdadel
+               << " prescaler=" << result.prescaler
+               << " actual_hold_ps=" << actual_hold_ps);
+  }
 }
 
 BOOST_AUTO_TEST_CASE(TimingTest2) {

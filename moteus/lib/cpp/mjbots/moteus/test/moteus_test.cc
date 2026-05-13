@@ -73,6 +73,75 @@ BOOST_AUTO_TEST_CASE(FdcanusbConstruct) {
 }
 
 namespace {
+struct Tracker {
+  bool alive = false;
+  int payload = 0;
+
+  static int constructions;
+  static int destructions;
+  static int bad_assign;
+  static int bad_destroy;
+
+  Tracker() : alive(true), payload(0) { ++constructions; }
+  Tracker(int p) : alive(true), payload(p) { ++constructions; }
+  Tracker(const Tracker& other)
+      : alive(true), payload(other.payload) { ++constructions; }
+
+  Tracker& operator=(const Tracker& other) {
+    if (!alive) { ++bad_assign; }
+    payload = other.payload;
+    return *this;
+  }
+
+  ~Tracker() {
+    if (!alive) { ++bad_destroy; }
+    alive = false;
+    ++destructions;
+  }
+};
+
+int Tracker::constructions = 0;
+int Tracker::destructions = 0;
+int Tracker::bad_assign = 0;
+int Tracker::bad_destroy = 0;
+}  // namespace
+
+// Regression test for Optional::operator=(const T&) when the optional
+// is empty.  Previously the assignment ran T::operator= on the
+// unconstructed union member (and the destructor later ran ~T() on
+// the same unconstructed object), both undefined behaviour.
+BOOST_AUTO_TEST_CASE(OptionalAssignToEmpty) {
+  Tracker::constructions = 0;
+  Tracker::destructions = 0;
+  Tracker::bad_assign = 0;
+  Tracker::bad_destroy = 0;
+
+  {
+    moteus::Optional<Tracker> opt;
+    BOOST_TEST(!opt.has_value());
+
+    Tracker source(42);
+    opt = source;
+
+    BOOST_TEST(opt.has_value());
+    BOOST_TEST(opt->payload == 42);
+    BOOST_TEST(opt->alive == true);
+
+    // Assign again; this exercises the "already engaged" branch.
+    Tracker source2(99);
+    opt = source2;
+    BOOST_TEST(opt->payload == 99);
+  }
+
+  // No assignment to or destruction of an unconstructed Tracker
+  // should have occurred.
+  BOOST_TEST(Tracker::bad_assign == 0);
+  BOOST_TEST(Tracker::bad_destroy == 0);
+  // And the construction/destruction counts must balance.
+  BOOST_TEST(Tracker::constructions == Tracker::destructions);
+}
+
+namespace {
 moteus::Fdcanusb::Options MakeOptions() {
   moteus::Fdcanusb::Options options;
   options.min_ok_wait_ns =   200000000;
@@ -140,6 +209,50 @@ BOOST_AUTO_TEST_CASE(FdcanusbBasicSingle) {
   BOOST_TEST(r.data[0] == 0x12);
   BOOST_TEST(r.data[1] == 0x34);
   BOOST_TEST(r.data[2] == 0x56);
+}
+
+// Regression test: the initial flush at the start of a Cycle is
+// supposed to drop bytes left over from a prior cycle, not append
+// them into the caller's replies vector as if they were responses to
+// the new cycle.  Previously the flush was passed `replies` and the
+// parser emplace_back'd any stale frame onto it, so a slow reply
+// from the previous cycle could be returned as if it were the
+// current cycle's result.
+BOOST_AUTO_TEST_CASE(FdcanusbStaleDataFlush) {
+  RwPipe pipe;
+  moteus::Fdcanusb dut(pipe.read_fds[0], pipe.write_fds[1], MakeOptions());
+
+  // Drop a stale rcv line into the pipe before we start any cycle.
+  pipe.Write("rcv 0102 ababab\r\n");
+  ::usleep(100000);
+
+  std::optional<int> result_errno;
+  const auto completed = [&](int errno_in) { result_errno = errno_in; };
+
+  moteus::CanFdFrame frame;
+  frame.arbitration_id = 0x123;
+  frame.reply_required = false;
+  frame.data[0] = 0x45;
+  frame.data[1] = 0x67;
+  frame.size = 2;
+
+  std::vector<moteus::CanFdFrame> replies;
+  dut.Cycle(&frame, 1, &replies, completed);
+
+  // Drain the request line, then satisfy the cycle.
+  {
+    char line_buf[4096] = {};
+    const char* result = ::fgets(line_buf, sizeof(line_buf), pipe.test_read);
+    moteus::Fdcanusb::FailIfErrno(result == nullptr);
+  }
+  pipe.Write("OK\r\n");
+  ::usleep(100000);
+
+  BOOST_TEST(!!result_errno);
+  BOOST_TEST(*result_errno == 0);
+  // The cycle did not request a reply, so the stale rcv must have
+  // been dropped by the flush.
+  BOOST_TEST(replies.size() == 0u);
 }
 
 BOOST_AUTO_TEST_CASE(FdcanusbBasicNoResponse) {
@@ -967,6 +1080,37 @@ BOOST_AUTO_TEST_CASE(ControllerDiagnosticTest) {
     const auto result = dut.DiagnosticCommand("conf enumerate");
     BOOST_TEST(result == "id.id 0\r\nstuff.bar 1\r\nbing.baz 234\r\n");
   }
+}
+
+// Regression test: when Options::default_query is false but the
+// caller explicitly requests a query (via AsyncQuery, or any Async*
+// with a query_override), the frame is sent with reply_required=true.
+// If the reply never arrives, the completion callback must report
+// ETIMEDOUT, not 0.
+BOOST_AUTO_TEST_CASE(ControllerAsyncQueryNoReplyDefaultQueryFalse) {
+  auto impl = std::make_shared<AsyncTestTransport>();
+  TestCallback cbk;
+  auto cbk_wrap = [&](int v) { cbk(v); };
+  moteus::Controller::Result result;
+
+  moteus::Controller::Options options;
+  options.transport = impl;
+  options.default_query = false;
+  moteus::Controller dut(options);
+
+  dut.AsyncQuery(&result, cbk_wrap);
+
+  // The frame must have been sent with reply_required=true even
+  // though default_query is false.
+  BOOST_TEST_REQUIRE(impl->sent_frames.size() == 1u);
+  BOOST_TEST(impl->sent_frames[0].reply_required == true);
+
+  // Drain the queue without supplying any reply.
+  if (impl->to_reply) { impl->to_reply->resize(0); }
+  impl->ProcessQueue();
+
+  BOOST_TEST(cbk.called);
+  BOOST_TEST(cbk.value == ETIMEDOUT);
 }
 
 BOOST_AUTO_TEST_CASE(ControllerAsyncDiagnosticTest) {

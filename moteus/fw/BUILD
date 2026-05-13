@@ -342,14 +342,16 @@ py_test(
     deps=[
         ":hall_filter_test",
     ],
-    args=[
-        "--binary",
-        "$(location :hall_filter_test)",
-        "--datafile",
-        "$(rootpath :test/data/20250616-back-and-forth.dat.gz)",
+    args = [
+        "--binary", "$(location :hall_filter_test)",
+        "--datafile", "$(rootpath :test/data/20250616-back-and-forth.dat.gz)",
     ],
-    size="medium",
-    data=[
+    size = 'medium',
+    # Excluded from host_ubsan via travis-ci.sh: under UBSan
+    # instrumentation this test takes ~10 minutes, well past any
+    # reasonable CI budget.
+    tags = ["no_ubsan"],
+    data = [
         "test/data/20250616-back-and-forth.dat.gz",
         "test/data/20250616-hboard-cycle.dat.gz",
         "test/data/20250616-speed-cycle.dat.gz",

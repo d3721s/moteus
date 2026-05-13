@@ -251,14 +251,16 @@ class BldcServoControl {
     const auto delta = static_cast<int64_t>(self().absolute_relative_delta()) << 32ll;
     if (!std::isnan(data->position)) {
       data->position_relative_raw =
-          MotorPosition::FloatToInt(data->position) - delta;
+          MotorPosition::WrappingSub(
+              MotorPosition::FloatToInt(data->position), delta);
     } else {
       data->position_relative_raw.reset();
     }
 
     if (!std::isnan(data->stop_position)) {
       data->stop_position_relative_raw =
-          MotorPosition::FloatToInt(data->stop_position) - delta;
+          MotorPosition::WrappingSub(
+              MotorPosition::FloatToInt(data->stop_position), delta);
     }
 
     // If we have a case where the position is left unspecified, but
@@ -269,8 +271,9 @@ class BldcServoControl {
         !std::isnan(data->velocity) &&
         data->velocity != 0.0f) {
       data->velocity = std::abs(data->velocity) *
-          (((*data->stop_position_relative_raw -
-             self().position_.position_relative_raw) > 0) ?
+          ((MotorPosition::WrappingSub(
+                *data->stop_position_relative_raw,
+                self().position_.position_relative_raw) > 0) ?
            1.0f : -1.0f);
     }
 

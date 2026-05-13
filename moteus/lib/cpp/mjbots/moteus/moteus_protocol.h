@@ -1088,9 +1088,12 @@ struct CurrentMode {
     frame->Write<int8_t>(Register::kMode);
     frame->Write<int8_t>(Mode::kCurrent);
 
+    // Match the on-the-wire register order: kCommandQCurrent (0x1c)
+    // then kCommandDCurrent (0x1d).  The WriteCurrent calls below
+    // emit q_A then d_A; resolutions must align.
     const Resolution kResolutions[] = {
-      format.d_A,
       format.q_A,
+      format.d_A,
     };
 
     WriteCombiner combiner(

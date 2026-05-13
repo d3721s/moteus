@@ -200,7 +200,8 @@ class BldcServoPosition {
     // What is the delta between our current control state and the
     // command.
     const float dx = MotorPosition::IntToFloat(
-        (*data->position_relative_raw - *status->control_position_raw));
+        MotorPosition::WrappingSub(
+            *data->position_relative_raw, *status->control_position_raw));
 
     if (std::isnan(data->accel_limit)) {
       // We only have a velocity limit, not an acceleration limit.
@@ -222,12 +223,14 @@ class BldcServoPosition {
     // If this velocity would exceed the velocity limit, or pass
     // through it while decelerating, make sure we have at least one
     // cycle exactly at the velocity limit so we will properly enter
-    // the "cruise" phase.
+    // the "cruise" phase.  The cruise direction is the direction the
+    // controller is heading (v1); v0 may be zero, or even oppositely
+    // signed if a single step crossed zero.
     if (std::isfinite(data->velocity_limit) &&
         vel_lower < data->velocity_limit &&
         vel_upper > data->velocity_limit) {
       status->control_acceleration = 0.0f;
-      status->control_velocity = std::copysign(data->velocity_limit, v0);
+      status->control_velocity = std::copysign(data->velocity_limit, v1);
     }
 
     const float v1_final = *status->control_velocity;
@@ -378,7 +381,8 @@ class BldcServoPosition {
         (static_cast<int64_t>(
             static_cast<int32_t>((static_cast<float>(1ll << 32) * step))) <<
          16);
-    status->control_position_raw = *status->control_position_raw + int64_step;
+    status->control_position_raw =
+        MotorPosition::WrappingAdd(*status->control_position_raw, int64_step);
 
     if (data->position_relative_raw && !std::isnan(velocity)) {
       const float tstep = velocity * period_s;
@@ -386,7 +390,9 @@ class BldcServoPosition {
         (static_cast<int64_t>(
             static_cast<int32_t>((static_cast<float>(1ll << 32) * tstep))) <<
          16);
-      data->position_relative_raw = *data->position_relative_raw + tint64_step;
+      data->position_relative_raw =
+          MotorPosition::WrappingAdd(
+              *data->position_relative_raw, tint64_step);
     }
 
     if (std::isfinite(config->max_position_slip) && !data->synthetic_theta) {
@@ -395,12 +401,15 @@ class BldcServoPosition {
           MotorPosition::FloatToInt(config->max_position_slip);
 
       const int64_t error =
-          current_position - *status->control_position_raw;
+          MotorPosition::WrappingSub(
+              current_position, *status->control_position_raw);
       if (error < -slip) {
-        *status->control_position_raw = current_position + slip;
+        *status->control_position_raw =
+            MotorPosition::WrappingAdd(current_position, slip);
       }
       if (error > slip) {
-        *status->control_position_raw = current_position - slip;
+        *status->control_position_raw =
+            MotorPosition::WrappingSub(current_position, slip);
       }
     }
 
@@ -422,8 +431,11 @@ class BldcServoPosition {
 
     const auto saturate = [&](auto value, auto compare) MOTEUS_CCM_ATTRIBUTE {
       if (std::isnan(value)) { return; }
-      const auto limit_value = MotorPosition::FloatToInt(value) - delta;
-      if (compare(*status->control_position_raw - limit_value, 0)) {
+      const auto limit_value =
+          MotorPosition::WrappingSub(MotorPosition::FloatToInt(value), delta);
+      if (compare(MotorPosition::WrappingSub(
+                      *status->control_position_raw, limit_value),
+                  0)) {
         status->control_position_raw = limit_value;
         hit_limit = true;
       }
@@ -443,8 +455,9 @@ class BldcServoPosition {
         if (value > 0) { return 1.0f; }
         return 0.0f;
       };
-      if (sign(*status->control_position_raw -
-               stop_position_raw) * velocity_command > 0.0f) {
+      if (sign(MotorPosition::WrappingSub(
+                   *status->control_position_raw,
+                   stop_position_raw)) * velocity_command > 0.0f) {
         // We are moving away from the stop position.  Force it to be
         // there and zero out our velocity command.
         status->control_position_raw = stop_position_raw;
@@ -469,7 +482,8 @@ class BldcServoPosition {
         !status->control_position_raw ?
         std::numeric_limits<float>::quiet_NaN() :
         MotorPosition::IntToFloat(
-            *status->control_position_raw + absolute_relative_delta);
+            MotorPosition::WrappingAdd(
+                *status->control_position_raw, absolute_relative_delta));
 
     return velocity_command;
   }

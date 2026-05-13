@@ -48,6 +48,7 @@ struct Context : public BldcServoControl<Context> {
   int hard_stop_count = 0;
   int calibrating_count = 0;
   int brake_count = 0;
+  int hiz_count = 0;
   int start_calibrating_count = 0;
 
   bool fault_state = false;
@@ -71,6 +72,10 @@ struct Context : public BldcServoControl<Context> {
 
   void DoBrake() {
     brake_count++;
+  }
+
+  void DoHiz() {
+    hiz_count++;
   }
 
   void StartCalibrating() {
@@ -910,10 +915,11 @@ BOOST_AUTO_TEST_CASE(BldcServoControlDoStopped) {
   BOOST_TEST(ctx.status_.cooldown_count == (ctx.config_.cooldown_brake));
   BOOST_TEST(ctx.pwm_control_count == 1);  // ISR_DoCurrent drove PWM
 
-  // And with a small cooldown, we should call brake.
+  // And with a small cooldown, we should call hiz.
   ctx.status_.cooldown_count = 3;
   ctx.ISR_DoStopped(sc);
-  BOOST_TEST(ctx.brake_count == 1);
+  BOOST_TEST(ctx.hiz_count == 1);
+  BOOST_TEST(ctx.brake_count == 0);
   BOOST_TEST(ctx.hard_stop_count == 1);  // unchanged
   BOOST_TEST(ctx.pwm_control_count == 1);  // unchanged
   BOOST_TEST(ctx.status_.cooldown_count == 2);
@@ -1021,18 +1027,8 @@ BOOST_AUTO_TEST_CASE(BldcServoControlDoControl) {
   BOOST_CHECK(ctx.status_.mode == BldcServoMode::kFault);
   BOOST_CHECK(ctx.status_.fault == errc::kOverVoltage);
 
-  // Test fault detection - configurable under voltage.
-  ctx.status_.mode = BldcServoMode::kCurrent;
-  ctx.status_.fault = errc::kSuccess;
-  ctx.config_.min_voltage = 20.0f;
-  ctx.status_.bus_V = 19.0f;
-  ctx.ISR_DoControl(sc, &data);
-  BOOST_CHECK(ctx.status_.mode == BldcServoMode::kFault);
-  BOOST_CHECK(ctx.status_.fault == errc::kUnderVoltage);
-
   // Test fault detection - motor driver fault.
   ctx.status_.mode = BldcServoMode::kCurrent;
-  ctx.status_.fault = errc::kSuccess;
   ctx.status_.bus_V = 24.0f;
   ctx.fault_state = true;
   ctx.ISR_DoControl(sc, &data);

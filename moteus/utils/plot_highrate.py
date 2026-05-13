@@ -59,7 +59,7 @@ def main():
         raise RuntimeError("Could not locate header in highrate data")
 
     parsed = [s.unpack(data[i:i+s.size])
-              for i in range(0, len(data) - s.size, s.size)]
+              for i in range(0, len(data) - s.size + 1, s.size)]
 
     def fmt_tuple(l):
         return ','.join([f"{x:04x}" for x in l])
@@ -71,7 +71,7 @@ def main():
             print(fmt_tuple(parsed[i]))
 
     size = len(parsed)
-    xvals = np.arange(0, size / args.pwm_hz, 1.0 / args.pwm_hz)
+    xvals = np.arange(size) / args.pwm_hz
 
     if args.emit_debug:
         # Scale data and group by units

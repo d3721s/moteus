@@ -195,8 +195,12 @@ FamilyAndVersion DetectMoteusFamily(MillisecondTimer* timer) {
                   (hwrev1.read() << 1) |
                   (hwrev2.read() << 2)));
     result.hw_pins = this_hw_pins;
-    const uint8_t measured_hw_rev =
-        [&]() {
+    // result.hw_version is signed so that an unmatched encoding can
+    // travel as -1 to the compatibility check in moteus.cc; assign
+    // the lambda result directly rather than going through a uint8_t
+    // local.
+    result.hw_version =
+        [&]() -> int {
           int i = 0;
           for (auto rev_pins : kFamily0HardwareInterlock) {
             if (rev_pins == this_hw_pins) { return i; }
@@ -204,7 +208,6 @@ FamilyAndVersion DetectMoteusFamily(MillisecondTimer* timer) {
           }
           return -1;
         }();
-    result.hw_version = measured_hw_rev;
   } else if (result.family == 1 || result.family == 2 || result.family == 3) {
     __HAL_RCC_ADC12_CLK_ENABLE();
 

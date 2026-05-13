@@ -857,9 +857,12 @@ class Controller:
         result, data_buf = self._make_command(
             query=query, query_override=query_override)
         cr = self.current_resolution
+        # Match the on-the-wire register order: COMMAND_Q_CURRENT
+        # (0x1c) then COMMAND_D_CURRENT (0x1d).  See the comment
+        # below: Q comes first.
         resolutions = [
-            cr.d_A if d_A is not None else mp.IGNORE,
             cr.q_A if q_A is not None else mp.IGNORE,
+            cr.d_A if d_A is not None else mp.IGNORE,
         ]
 
         writer = Writer(data_buf)
@@ -1646,9 +1649,9 @@ async def move_to(
 
             # Duration-computed velocity limits override everything
             # (since duration is for coordinated timing across all servos)
-            velocity_limit = norm.get('velocity_limit', None)
-            if velocity_limit is not None:
-                cmd_kwargs['velocity_limit'] = velocity_limit
+            duration_velocity_limit = norm.get('velocity_limit', None)
+            if duration_velocity_limit is not None:
+                cmd_kwargs['velocity_limit'] = duration_velocity_limit
 
             commands.append(norm['c'].make_position(**cmd_kwargs))
 

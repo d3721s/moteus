@@ -24,7 +24,9 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#include <chrono>
 #include <list>
+#include <set>
 
 #include "mjlib/base/clipp_archive.h"
 #include "mjlib/base/clipp.h"
@@ -288,7 +290,9 @@ class Controller {
         options_(options) {}
 
   std::string stats() const {
-    return fmt::format("{:2d} {:6.3f}", servo_stats_.mode, servo_stats_.torque_Nm);
+    return fmt::format("{:2d} {:6.3f}",
+                       static_cast<int>(servo_stats_.mode),
+                       servo_stats_.torque_Nm);
   }
 
   const ServoStats& servo_stats() const {
@@ -1035,7 +1039,9 @@ class Application {
       if (r.mode != ServoStats::kVoltageFoc) {
         errors.push_back(
             fmt::format("Motor not in PWM mode at voltage: {} {}!={}",
-                        r.voltage, r.mode, ServoStats::kVoltageFoc));
+                        r.voltage,
+                        static_cast<int>(r.mode),
+                        static_cast<int>(ServoStats::kVoltageFoc)));
         break;
       }
     }
@@ -1044,7 +1050,9 @@ class Application {
       if (r.mode != ServoStats::kVoltageFoc) {
         errors.push_back(
             fmt::format("Motor not in PWM mode at phase: {} {}!={}",
-                        r.phase, r.mode, ServoStats::kVoltageFoc));
+                        r.phase,
+                        static_cast<int>(r.mode),
+                        static_cast<int>(ServoStats::kVoltageFoc)));
         break;
       }
     }
@@ -2531,8 +2539,9 @@ class Application {
   }
 
   boost::asio::awaitable<void> Sleep(double seconds) {
-    boost::asio::deadline_timer timer(executor_);
-    timer.expires_from_now(mjlib::base::ConvertSecondsToDuration(seconds));
+    boost::asio::steady_timer timer(executor_);
+    timer.expires_after(std::chrono::microseconds(
+        static_cast<int64_t>(seconds * 1e6)));
     co_await timer.async_wait(boost::asio::use_awaitable);
     co_return;
   }
@@ -2665,8 +2674,8 @@ class Application {
                    elapsed(), header, app->fixture_->stats(), app->dut_->stats());
         ::fflush(stdout);
 
-        boost::asio::deadline_timer timer(app->executor_);
-        timer.expires_from_now(boost::posix_time::seconds(1));
+        boost::asio::steady_timer timer(app->executor_);
+        timer.expires_after(std::chrono::seconds(1));
         co_await timer.async_wait(boost::asio::use_awaitable);
       }
     }

@@ -564,8 +564,14 @@ class FdcanusbDevice(TransportDevice):
             async def handler(frame, request=request, future=future):
                 if future.done():
                     # Stick it in our receive queue so that it isn't
-                    # lost.
+                    # lost.  Mirror what _handle_received_frame does in
+                    # the no-subscription path: bound the queue and
+                    # wake any receive_frame() waiter so the frame is
+                    # actually delivered.
                     self._receive_queue.append(frame)
+                    while len(self._receive_queue) > self._max_buffer_size:
+                        self._receive_queue.pop(0)
+                    self._notify_waiters(self._receive_waiters)
 
                     return
 

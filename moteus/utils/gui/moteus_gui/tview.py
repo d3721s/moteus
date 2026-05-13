@@ -87,6 +87,8 @@ import moteus.reader as reader
 import moteus.multiplex
 from moteus import Register, Mode
 
+from . import python_console_ast
+
 
 # Fault monitoring configuration
 FAULT_POLLING_INTERVAL_MS = 500
@@ -696,77 +698,10 @@ class TviewPythonConsole(HistoryConsoleWidget):
             return False
 
     def _has_loops(self, source):
-        """Check if source code contains loops (for/while)."""
-        try:
-            tree = ast.parse(source)
-            for node in ast.walk(tree):
-                if isinstance(node, (ast.While, ast.For)):
-                    return True
-            return False
-        except SyntaxError:
-            return False
+        return python_console_ast.has_loops(source)
 
     def _inject_yields_in_loops(self, source):
-        """Transform source code to inject 'await asyncio.sleep(0)' in loop bodies.
-
-        This allows tight loops to be cancelled via CTRL-C by giving the event
-        loop a chance to process cancellation.
-        """
-        try:
-            tree = ast.parse(source)
-
-            class LoopTransformer(ast.NodeTransformer):
-                def visit_While(self, node):
-                    # Visit children first
-                    self.generic_visit(node)
-                    # Inject await asyncio.sleep(0) at the start of the loop body
-                    yield_stmt = ast.Expr(
-                        value=ast.Await(
-                            value=ast.Call(
-                                func=ast.Attribute(
-                                    value=ast.Name(id='asyncio', ctx=ast.Load()),
-                                    attr='sleep',
-                                    ctx=ast.Load()
-                                ),
-                                args=[ast.Constant(value=0)],
-                                keywords=[]
-                            )
-                        )
-                    )
-                    # Insert at the beginning of the body
-                    node.body = [yield_stmt] + node.body
-                    return node
-
-                def visit_For(self, node):
-                    # Visit children first
-                    self.generic_visit(node)
-                    # Inject await asyncio.sleep(0) at the start of the loop body
-                    yield_stmt = ast.Expr(
-                        value=ast.Await(
-                            value=ast.Call(
-                                func=ast.Attribute(
-                                    value=ast.Name(id='asyncio', ctx=ast.Load()),
-                                    attr='sleep',
-                                    ctx=ast.Load()
-                                ),
-                                args=[ast.Constant(value=0)],
-                                keywords=[]
-                            )
-                        )
-                    )
-                    # Insert at the beginning of the body
-                    node.body = [yield_stmt] + node.body
-                    return node
-
-            transformer = LoopTransformer()
-            new_tree = transformer.visit(tree)
-            ast.fix_missing_locations(new_tree)
-
-            # Convert back to source code
-            return ast.unparse(new_tree)
-        except Exception:
-            # If transformation fails, return original source
-            return source
+        return python_console_ast.inject_yields_in_loops(source)
 
     def _execute(self, source, hidden):
         # Safety check: if we have a running future, we shouldn't be executing new code

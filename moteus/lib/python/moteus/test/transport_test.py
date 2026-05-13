@@ -682,6 +682,51 @@ class TransportTest(FdcanusbTestBase):
 
         self.run_async(test())
 
+    def test_cancelled_queue_overflow_trims_in_place(self):
+        # Regression test: _add_cancelled_frames previously called
+        # .pop(0) on the int max-size attribute instead of the list,
+        # raising AttributeError as soon as the queue exceeded 100
+        # entries.
+        t = transport.Transport([MockTransportDevice()])
+        t._cancel_queue_max_size = 5
+
+        t._add_cancelled_frames(['a', 'b', 'c'])
+        self.assertEqual(t._cancelled_queue, ['a', 'b', 'c'])
+
+        # Push past the limit; the oldest entries must drop and no
+        # exception must be raised.
+        t._add_cancelled_frames(['d', 'e', 'f', 'g'])
+        self.assertEqual(len(t._cancelled_queue), 5)
+        self.assertEqual(t._cancelled_queue, ['c', 'd', 'e', 'f', 'g'])
+
+    def test_routing_table_not_shared_across_instances(self):
+        # Regression test: a mutable {} default on
+        # Transport.__init__ / TransportWrapper.__init__ used to make
+        # every default-constructed instance share the same routing
+        # table dict, so discovery entries written by one transport
+        # leaked into the next.
+        from moteus.transport_wrapper import TransportWrapper
+
+        d1 = MockTransportDevice()
+        d2 = MockTransportDevice()
+        tw1 = TransportWrapper([d1])
+        tw2 = TransportWrapper([d2])
+
+        # Different dict objects.
+        self.assertIsNot(
+            tw1._transport._routing_table,
+            tw2._transport._routing_table)
+
+        # And mutating one does not show up in the other.
+        marker = transport.DeviceAddress(can_id=42)
+        tw1._transport._routing_table[marker] = d1
+        self.assertNotIn(marker, tw2._transport._routing_table)
+
+        # Same property must hold for direct Transport usage.
+        t1 = transport.Transport([MockTransportDevice()])
+        t2 = transport.Transport([MockTransportDevice()])
+        self.assertIsNot(t1._routing_table, t2._routing_table)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -80,11 +80,11 @@ BOOST_AUTO_TEST_CASE(BisscCrcBasic) {
 
 BOOST_AUTO_TEST_CASE(BisscCrcTableMatchesBitwise) {
   // Verify that the table-based CRC matches the reference bitwise
-  // implementation.
-
-  // Test all bit lengths from 1 to 24 (covering typical encoder ranges)
-  for (uint8_t data_bits = 1; data_bits <= 24; data_bits++) {
-    // Test with several data patterns
+  // implementation across the full supported input range.  The table
+  // path handles up to 60 input bits, which is the BiSS-C config limit
+  // of kMaxDataBits=58 plus the 2 status bits ExtractBisscFrame folds
+  // in.
+  for (uint8_t data_bits = 1; data_bits <= 60; data_bits++) {
     for (uint64_t pattern : {0ULL, 1ULL, 0x5555555555555555ULL,
                               0xAAAAAAAAAAAAAAAAULL, 0xFFFFFFFFFFFFFFFFULL}) {
       const uint64_t mask = (1ULL << data_bits) - 1;
@@ -307,6 +307,47 @@ BOOST_AUTO_TEST_CASE(BisscFullFrameExtraction) {
   BOOST_TEST(result.data_value == 178);
   BOOST_TEST(result.error_flag == false);    // HIGH signal = no error
   BOOST_TEST(result.warning_flag == false);  // HIGH signal = no warning
+  BOOST_TEST(result.crc_received == expected_crc);
+  BOOST_TEST(result.crc_computed == expected_crc);
+}
+
+BOOST_AUTO_TEST_CASE(BisscFullFrameExtractionWideEncoder) {
+  // Round-trip a frame at the configured maximum (kMaxDataBits = 58).
+  // This exercises the previously-broken path where data_bits + 2 > 60
+  // caused ComputeBisscCRC to silently truncate the CRC input.
+  const uint8_t pin_pos = 0;
+  const uint8_t data_bits = 58;
+  const uint64_t data_value = 0x03DCBA9876543210ULL;
+
+  std::vector<int> bits = {1, 1,    // idle
+                            0, 0,    // ACK
+                            1,       // START
+                            0};      // CDS
+  for (int i = data_bits - 1; i >= 0; i--) {
+    bits.push_back((data_value >> i) & 1);
+  }
+  bits.push_back(1);  // error (HIGH = no flag)
+  bits.push_back(1);  // warning (HIGH = no flag)
+
+  // Compute the expected CRC bitwise -- this is what a real BiSS-C
+  // device would transmit.
+  const uint64_t crc_input = (data_value << 2) | (1u << 1) | 1u;
+  const uint32_t expected_crc = ReferenceCrc6(crc_input, data_bits + 2);
+  for (int i = 5; i >= 0; i--) {
+    bits.push_back(((expected_crc >> i) & 1) ? 0 : 1);  // CRC inverted on wire
+  }
+
+  auto buffer = MakeBuffer(bits, pin_pos);
+
+  BisscExtractConfig config;
+  config.pin_bit_pos = pin_pos;
+  config.data_bits = data_bits;
+  config.crc_bits = 6;
+
+  const auto result = ExtractBisscFrame(buffer.data(), buffer.size(), config);
+
+  BOOST_TEST(result.error == BisscExtractError::kNone);
+  BOOST_TEST(result.data_value == data_value);
   BOOST_TEST(result.crc_received == expected_crc);
   BOOST_TEST(result.crc_computed == expected_crc);
 }

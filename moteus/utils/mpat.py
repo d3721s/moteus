@@ -122,21 +122,24 @@ def main():
             sys.exit(1)
 
     # The CLI imports mpat_core.mjs from the same directory.
-    # Always copy both to temp to ensure they're colocated.
+    # Always copy both to temp to ensure they're colocated.  Use a
+    # TemporaryDirectory context so the per-invocation directory gets
+    # cleaned up on normal exit, errors, and Ctrl-C; previously every
+    # call leaked a ~96 KB /tmp/mpat_* directory.
     import tempfile
     import shutil
 
-    tmpdir = tempfile.mkdtemp(prefix="mpat_")
-    tmp_cli = os.path.join(tmpdir, "mpat_cli.mjs")
-    tmp_core = os.path.join(tmpdir, "mpat_core.mjs")
-    shutil.copy(cli_path, tmp_cli)
-    shutil.copy(core_path, tmp_core)
+    with tempfile.TemporaryDirectory(prefix="mpat_") as tmpdir:
+        tmp_cli = os.path.join(tmpdir, "mpat_cli.mjs")
+        tmp_core = os.path.join(tmpdir, "mpat_core.mjs")
+        shutil.copy(cli_path, tmp_cli)
+        shutil.copy(core_path, tmp_core)
 
-    # Run Node.js with the CLI, passing through all arguments
-    result = subprocess.run(
-        ["node", tmp_cli] + sys.argv[1:],
-        cwd=tmpdir
-    )
+        # Run Node.js with the CLI, passing through all arguments
+        result = subprocess.run(
+            ["node", tmp_cli] + sys.argv[1:],
+            cwd=tmpdir
+        )
 
     sys.exit(result.returncode)
 

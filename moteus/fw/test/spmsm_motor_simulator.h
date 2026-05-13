@@ -101,6 +101,41 @@ class SpmsmMotorSimulator {
     }
   }
 
+  // Step the motor simulation with the inverter in high-impedance state
+  // (all FETs off).
+  //
+  // With all transistors off, phase currents are forced to zero (no path
+  // through the bridge).  Body diodes only conduct when back-EMF exceeds
+  // bus voltage; below that threshold this is effectively open-circuit, so
+  // the electromagnetic torque is zero.  The mechanical dynamics still run
+  // under viscous damping and external load.
+  void StepHiz(float dt, float T_load = 0.0f) {
+    constexpr int kSubSteps = 10;
+    const double sub_dt = static_cast<double>(dt) / kSubSteps;
+
+    for (int i = 0; i < kSubSteps; i++) {
+      state_.i_d = 0.0;
+      state_.i_q = 0.0;
+
+      // J * domega/dt = T_load - B*omega  (T_em = 0 since i_q = 0)
+      const double domega_dt =
+          (static_cast<double>(T_load) -
+           model_->B() * state_.omega_mechanical) / model_->J();
+      state_.omega_mechanical += domega_dt * sub_dt;
+
+      state_.theta_mechanical += state_.omega_mechanical * sub_dt;
+      state_.theta_electrical +=
+          state_.omega_mechanical * model_->pole_pairs() * sub_dt;
+
+      while (state_.theta_electrical >= k2Pi_d) {
+        state_.theta_electrical -= k2Pi_d;
+      }
+      while (state_.theta_electrical < 0.0) {
+        state_.theta_electrical += k2Pi_d;
+      }
+    }
+  }
+
   // Step the motor simulation given DQ-frame voltages.
   // Performs inverse Park and Clarke transforms to convert to phase voltages.
   // dt: time step (seconds)

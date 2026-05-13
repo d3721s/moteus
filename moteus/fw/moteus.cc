@@ -87,18 +87,29 @@ void SetupClock() {
 
     PeriphClkInit.PeriphClockSelection =
         RCC_PERIPHCLK_FDCAN |
+        RCC_PERIPHCLK_USART1 |
         RCC_PERIPHCLK_USART2 |
         RCC_PERIPHCLK_USART3 |
         RCC_PERIPHCLK_ADC12 |
         RCC_PERIPHCLK_ADC345 |
-        RCC_PERIPHCLK_I2C1
+        RCC_PERIPHCLK_I2C1 |
+        RCC_PERIPHCLK_I2C2
         ;
     PeriphClkInit.FdcanClockSelection = RCC_FDCANCLKSOURCE_PCLK1;
+    // Each USART instance uses its natural APB clock (PCLK2 for
+    // USART1, PCLK1 for USART2/USART3); mbed's serial_baud queries
+    // the matching PCLK frequency for baud-rate computation.
+    PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_PCLK2;
     PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
     PeriphClkInit.Usart3ClockSelection = RCC_USART3CLKSOURCE_PCLK1;
     PeriphClkInit.Adc12ClockSelection = RCC_ADC12CLKSOURCE_SYSCLK;
     PeriphClkInit.Adc345ClockSelection = RCC_ADC345CLKSOURCE_SYSCLK;
+    // Both I2C peripherals run from SYSCLK so Stm32I2c can use a
+    // single HAL_RCC_GetSysClockFreq() reading for the timing
+    // calculator regardless of which instance any given aux port
+    // happens to route to.
     PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_SYSCLK;
+    PeriphClkInit.I2c2ClockSelection = RCC_I2C2CLKSOURCE_SYSCLK;
     if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK) {
       mbed_die();
     }

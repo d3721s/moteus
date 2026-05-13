@@ -280,6 +280,48 @@ BOOST_AUTO_TEST_CASE(CurrentMake) {
   BOOST_TEST(reply_size == 0);
 }
 
+// Regression test: Format::d_A and Format::q_A had been wired into
+// the resolution slots in the wrong order (slot 0 == reg 0x1c == Q,
+// but the resolution at slot 0 was format.d_A).  When only one of
+// d_A / q_A is non-ignore, that swap caused the
+// kIgnore-resolution branch in WriteCanData::WriteMapped to fire
+// and abort().
+BOOST_AUTO_TEST_CASE(CurrentMakeQOnly) {
+  moteus::CanData frame;
+  moteus::WriteCanData write_frame(&frame);
+
+  moteus::CurrentMode::Command cmd;
+  cmd.q_A = 2.0;
+  moteus::CurrentMode::Format fmt;
+  fmt.d_A = moteus::Resolution::kIgnore;
+  fmt.q_A = moteus::Resolution::kFloat;
+
+  const auto reply_size =
+      moteus::CurrentMode::Make(&write_frame, cmd, fmt);
+
+  // WriteFloat 1 reg 0x1c, value 2.0
+  BOOST_TEST(Hexify(frame) == "0100090d1c00000040");
+  BOOST_TEST(reply_size == 0);
+}
+
+BOOST_AUTO_TEST_CASE(CurrentMakeDOnly) {
+  moteus::CanData frame;
+  moteus::WriteCanData write_frame(&frame);
+
+  moteus::CurrentMode::Command cmd;
+  cmd.d_A = 1.0;
+  moteus::CurrentMode::Format fmt;
+  fmt.d_A = moteus::Resolution::kFloat;
+  fmt.q_A = moteus::Resolution::kIgnore;
+
+  const auto reply_size =
+      moteus::CurrentMode::Make(&write_frame, cmd, fmt);
+
+  // WriteFloat 1 reg 0x1d, value 1.0
+  BOOST_TEST(Hexify(frame) == "0100090d1d0000803f");
+  BOOST_TEST(reply_size == 0);
+}
+
 BOOST_AUTO_TEST_CASE(StayWithinDefaults) {
   moteus::CanData frame;
   moteus::WriteCanData write_frame(&frame);

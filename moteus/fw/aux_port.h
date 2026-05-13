@@ -242,10 +242,15 @@ class AuxPort {
               ((hallb_->read() ? 1 : 0) << 1) |
               ((hallc_->read() ? 1 : 0) << 2);
           const auto delta = status_.hall.bits ^ old_bits;
+          // Popcount of delta's low three bits.  The conditional
+          // operator binds looser than +, so each ?: expression
+          // needs its own parentheses; otherwise the whole thing
+          // collapses to "any bit changed?" and multi-bit
+          // transitions are silently treated as single-bit ones.
           const auto numbits_changed =
-              (delta & 0x01) ? 1 : 0 +
-              (delta & 0x02) ? 1 : 0 +
-              (delta & 0x04) ? 1 : 0;
+              ((delta & 0x01) ? 1 : 0) +
+              ((delta & 0x02) ? 1 : 0) +
+              ((delta & 0x04) ? 1 : 0);
 
           if (numbits_changed > 1) {
             status_.hall.error++;

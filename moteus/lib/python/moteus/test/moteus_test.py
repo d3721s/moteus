@@ -723,6 +723,62 @@ class MoveToTest(unittest.TestCase):
 
         asyncio.run(test())
 
+    def test_move_to_global_velocity_limit_multi_servo(self):
+        """Regression test: a caller-supplied velocity_limit must apply
+        to every servo in a multi-servo move_to(), not just the first.
+        Previously the inner loop rebound the function-level
+        velocity_limit to None after the first iteration."""
+
+        mock_transport = MockTransport(responses=[
+            [MockResult(1, position=1.0, trajectory_complete=True),
+             MockResult(2, position=-0.5, trajectory_complete=True)],
+        ])
+
+        c1 = mot.Controller(id=1, transport=mock_transport)
+        c2 = mot.Controller(id=2, transport=mock_transport)
+
+        async def test():
+            await mot.move_to([(c1, 1.0), (c2, -0.5)], velocity_limit=5.0)
+
+            cmds = mock_transport.commands[0]
+            self.assertEqual(len(cmds), 2)
+            for i, cmd in enumerate(cmds):
+                regs = mot.parse_registers(cmd.data)
+                self.assertEqual(
+                    regs.command.get(mot.Register.COMMAND_VELOCITY_LIMIT),
+                    5.0,
+                    msg=f"servo {i} lost velocity_limit")
+
+        asyncio.run(test())
+
+    def test_move_to_global_velocity_limit_persists_across_iterations(self):
+        """Regression test: a caller-supplied velocity_limit must be
+        sent on every iteration of the polling loop, not just the
+        first command."""
+
+        mock_transport = MockTransport(responses=[
+            [MockResult(1, position=0.3, trajectory_complete=False)],
+            [MockResult(1, position=0.7, trajectory_complete=False)],
+            [MockResult(1, position=1.0, trajectory_complete=True)],
+        ])
+
+        controller = mot.Controller(id=1, transport=mock_transport)
+
+        async def test():
+            await mot.move_to(
+                controller, position=1.0, velocity_limit=3.0,
+                period_s=0.001)
+
+            self.assertEqual(len(mock_transport.commands), 3)
+            for i, cycle_cmds in enumerate(mock_transport.commands):
+                regs = mot.parse_registers(cycle_cmds[0].data)
+                self.assertEqual(
+                    regs.command.get(mot.Register.COMMAND_VELOCITY_LIMIT),
+                    3.0,
+                    msg=f"iteration {i} lost velocity_limit")
+
+        asyncio.run(test())
+
 
 class MockDiagnosticResult:
     """Mock result for diagnostic read operations."""

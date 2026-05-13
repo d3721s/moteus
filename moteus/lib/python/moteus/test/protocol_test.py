@@ -61,6 +61,36 @@ class ProtocolTest(unittest.TestCase):
         self.assertTrue(math.isnan(
             protocol.scale_register(protocol.Register.POSITION, mp.INT32, -2147483648)))
 
+    def test_scale_register_unmapped_returns_raw(self):
+        # Regression test: registers that are not in the explicit
+        # dispatch table (UUID*, MODEL_NUMBER, *_VERSION,
+        # DRIVER_FAULT*, etc.) carry raw integer payloads.  The NaN
+        # sentinel only applies to scaled fixed-point registers, so
+        # the int8/16/32 minimum value must NOT be remapped to NaN
+        # for these.
+        for reg in (protocol.Register.UUID1,
+                    protocol.Register.UUID2,
+                    protocol.Register.UUID3,
+                    protocol.Register.UUID4,
+                    protocol.Register.MODEL_NUMBER,
+                    protocol.Register.FIRMWARE_VERSION,
+                    protocol.Register.DRIVER_FAULT1,
+                    protocol.Register.DRIVER_FAULT2):
+            self.assertEqual(
+                protocol.scale_register(reg, mp.INT8, -128), -128,
+                msg=f'{reg!r} INT8 min misinterpreted')
+            self.assertEqual(
+                protocol.scale_register(reg, mp.INT16, -32768), -32768,
+                msg=f'{reg!r} INT16 min misinterpreted')
+            self.assertEqual(
+                protocol.scale_register(reg, mp.INT32, -2147483648),
+                -2147483648,
+                msg=f'{reg!r} INT32 min misinterpreted')
+
+            # int(...) on the result must not raise (callers like
+            # transport._extract_uuid_from_result rely on this).
+            int(protocol.scale_register(reg, mp.INT32, -2147483648))
+
     def test_scale_register_none(self):
         # None input should return None
         self.assertIsNone(protocol.scale_register(protocol.Register.POSITION, mp.INT8, None))

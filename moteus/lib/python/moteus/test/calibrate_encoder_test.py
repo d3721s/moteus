@@ -17,6 +17,7 @@
 import asyncio
 import io
 import unittest
+import unittest.mock
 
 import moteus.calibrate_encoder as ce
 
@@ -2293,6 +2294,30 @@ class CalibrateEncoderTest(unittest.TestCase):
         self.assertEqual(result.offset, -4)
         self.assertEqual(result.sign, -1)
         self.assertEqual(result.phase_invert, 0)
+
+    def test_calibrate_optimizer_failure_records_message(self):
+        # When scipy.optimize.minimize reports success=False, the
+        # optimizer's diagnostic message must be appended to
+        # result.errors.  Previously the code read the message off
+        # the wrong object (the local CalibrationResult, which has
+        # no `message` attribute) and aborted with AttributeError.
+        f = ce.parse_file(io.BytesIO(SOURCE_DATA))
+
+        real_minimize = ce.scipy.optimize.minimize
+
+        def failing_minimize(*args, **kwargs):
+            res = real_minimize(*args, **kwargs)
+            res.success = False
+            res.message = 'precision loss simulated'
+            return res
+
+        with unittest.mock.patch.object(
+                ce.scipy.optimize, 'minimize', failing_minimize):
+            r = ce.calibrate(f, force_optimize=True)
+
+        self.assertTrue(
+            any('precision loss simulated' in e for e in r.errors),
+            f'expected optimizer message in r.errors, got {r.errors!r}')
 
 
 if __name__ == '__main__':

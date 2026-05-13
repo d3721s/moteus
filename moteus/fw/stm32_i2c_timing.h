@@ -146,7 +146,14 @@ inline TimingResult TryTimingWithPrescaler(const TimingInput& i, int prescaler) 
 
   // const int64_t actual_scl_high_ps = (result.sclh + 1) * t_presc_ps;
 
-  result.sdadel = data_min_hold_ps / t_presc_ps;
+  // Per RM0440: tSDADEL = SDADEL * tPRESC + tI2CCLK.  Unlike SCLL /
+  // SCLH / SCLDEL, there is no "+1" on the SDADEL multiplier, so
+  // floor division here would underspecify the hold time.  Use a
+  // ceiling, and credit the +tI2CCLK term the hardware adds for free.
+  const int64_t sdadel_min_ps =
+      std::max<int64_t>(0, data_min_hold_ps - t_i2cclk_ps);
+  result.sdadel = static_cast<int>(
+      (sdadel_min_ps + t_presc_ps - 1) / t_presc_ps);
   if (result.sdadel > 15) {
     result.error = 4;
     return result;

@@ -508,8 +508,8 @@ BOOST_AUTO_TEST_CASE(AccelVelocityLimits, * boost::unit_test::tolerance(1e-3)) {
         const double this_pos =
             ctx.from_raw(ctx.status.control_position_raw.value());
         const double measured_vel =
-            (ctx.from_raw(ctx.to_raw(this_pos) -
-                          ctx.to_raw(old_pos))) * ctx.rate_hz;
+            (ctx.from_raw(MotorPosition::WrappingSub(
+                ctx.to_raw(this_pos), ctx.to_raw(old_pos)))) * ctx.rate_hz;
 
         const double this_vel =
             ctx.status.control_velocity.value();
@@ -1461,4 +1461,30 @@ BOOST_AUTO_TEST_CASE(ReaccelerationThreshold) {
   BOOST_TEST(time_stats.max < 2000.0f);
   // At end, time threshold increases as we're further below the curve
   BOOST_TEST(time_stats.last > time_stats.first);
+}
+
+// When the trapezoidal step crosses the velocity limit on a single
+// cycle from a starting velocity of 0, the cruise-injection branch in
+// DoVelocityAndAccelLimits must pick the cruise sign from the new
+// velocity (the direction the trajectory is heading), not the old.
+// Otherwise a move toward a negative target with v0 == +0.0 has the
+// controller stamp control_velocity to +velocity_limit on the first
+// cycle and enters a sustained ±limit oscillation that walks toward
+// the target at a fraction of the requested rate.
+BOOST_AUTO_TEST_CASE(VelocityLimitOverrideHonorsApproachDirection) {
+  Context ctx;
+  ctx.set_rate_hz(40000.0f);
+  ctx.set_position(0.0f);
+  ctx.status.control_position_raw = ctx.to_raw(0.0f);
+  ctx.status.control_velocity = 0.0f;
+  ctx.data.position = -10.0f;
+  ctx.data.velocity = 0.0f;
+  ctx.data.velocity_limit = 1.0f;
+  ctx.data.accel_limit = 100000.0f;
+  ctx.data.position_relative_raw.reset();
+
+  ctx.Call();
+
+  // The only legitimate trajectory direction here is negative.
+  BOOST_TEST(ctx.status.control_velocity.value() <= 0.0f);
 }
