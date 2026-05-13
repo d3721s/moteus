@@ -1105,7 +1105,9 @@ class BldcServo::Impl : public BldcServoControl<BldcServo::Impl> {
     status_.mode = kCalibrationComplete;
   }
 
-  void ISR_MaybeEmitDebug() MOTEUS_CCM_ATTRIBUTE {
+  // Optional debug serialization is large and runs after the critical
+  // sampling/control path, so keep it in flash instead of CCM.
+  void ISR_MaybeEmitDebug() {
     if (config_.emit_debug == 0 || !debug_uart_) { return; }
 
     debug_buf_[0] = 0x5a;
