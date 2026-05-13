@@ -184,8 +184,14 @@ class AuxPort {
           break;
         }
         case SampleType::kMt6835: {
+          const auto sample = mt6835_->FinishSample();
+          status_.spi.ic_pz_bits = sample.status;
+          if (!sample.valid) {
+            status_.spi.checksum_errors++;
+            break;
+          }
           status_.spi.active = true;
-          status_.spi.value = mt6835_->FinishSample();
+          status_.spi.value = sample.value;
           status_.spi.nonce += 1;
           break;
         }

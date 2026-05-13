@@ -27,6 +27,12 @@ class MT6835 {
  public:
   using Options = Stm32Spi::Options;
 
+  struct SampleResult {
+    uint32_t value = 0;
+    uint8_t status = 0;
+    bool valid = false;
+  };
+
   MT6835(const Options& options)
       : miso_input_(options.miso),
         cs_(options.cs, 1),
@@ -37,7 +43,7 @@ class MT6835 {
 
   uint32_t Sample() MOTEUS_CCM_ATTRIBUTE {
     StartSample();
-    return FinishSample();
+    return FinishSample().value;
   }
 
   void StartSample() MOTEUS_CCM_ATTRIBUTE {
@@ -46,19 +52,23 @@ class MT6835 {
     rx_[0] = Transfer(kBurstReadAngle0);
   }
 
-  uint32_t FinishSample() MOTEUS_CCM_ATTRIBUTE {
+  SampleResult FinishSample() MOTEUS_CCM_ATTRIBUTE {
     rx_[1] = Transfer(kBurstReadAngle1);
     rx_[2] = Transfer(0x00);
     rx_[3] = Transfer(0x00);
     rx_[4] = Transfer(0x00);
+    rx_[5] = Transfer(0x00);
+    Delay();
     cs_.set();
 
     const uint32_t raw =
         (static_cast<uint32_t>(rx_[2]) << 13) |
         (static_cast<uint32_t>(rx_[3]) << 5) |
         (static_cast<uint32_t>(rx_[4]) >> 3);
+    const uint8_t status = rx_[4] & 0x07;
+    const uint8_t crc = CalculateCrc(rx_[2], rx_[3], rx_[4]);
 
-    return raw;
+    return { raw, status, crc == rx_[5] };
   }
 
  private:
@@ -80,6 +90,24 @@ class MT6835 {
     __asm__ volatile("nop");
   }
 
+  static uint8_t CalculateCrc(uint8_t angle20_13,
+                              uint8_t angle12_5,
+                              uint8_t angle4_0_status) MOTEUS_CCM_ATTRIBUTE {
+    uint8_t crc = 0x00;
+    crc = UpdateCrc(crc, angle20_13);
+    crc = UpdateCrc(crc, angle12_5);
+    crc = UpdateCrc(crc, angle4_0_status);
+    return crc;
+  }
+
+  static uint8_t UpdateCrc(uint8_t crc, uint8_t value) MOTEUS_CCM_ATTRIBUTE {
+    crc ^= value;
+    for (int i = 0; i < 8; i++) {
+      crc = (crc & 0x80) ? ((crc << 1) ^ 0x07) : (crc << 1);
+    }
+    return crc;
+  }
+
   static constexpr uint8_t kBurstReadAngle0 = 0xa0;
   static constexpr uint8_t kBurstReadAngle1 = 0x03;
 
@@ -88,7 +116,7 @@ class MT6835 {
   Stm32DigitalOutput mosi_;
   Stm32DigitalMonitor miso_;
   Stm32DigitalOutput sck_;
-  uint8_t rx_[5] = {};
+  uint8_t rx_[6] = {};
 };
 
 }
