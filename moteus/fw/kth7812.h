@@ -89,6 +89,8 @@ class KTH7812 {
 
  private:
   bool SetConfig(const Options& options) {
+    EnableRegisterWrites();
+
     bool result = false;
 
     result |= SetRegister(kGainTrimReg, options.gt, 0xff,
@@ -121,6 +123,11 @@ class KTH7812 {
     return spi_.write(kReadAngle) >> 8;
   }
 
+  void EnableRegisterWrites() {
+    spi_.write(kRegisterWriteEnable);
+    timer_->wait_us(2);
+  }
+
   uint8_t BurnRegister(uint8_t reg, uint8_t value) {
     // KTH7812 register writes are MTP burns.  The second frame, after the
     // required wait, returns the newly written register value.
@@ -132,6 +139,7 @@ class KTH7812 {
   static constexpr uint16_t kReadAngle = 0x0000;
   static constexpr uint16_t kReadRegister = 0x4000;
   static constexpr uint16_t kWriteRegister = 0x8000;
+  static constexpr uint16_t kRegisterWriteEnable = 0xe800;
   static constexpr uint8_t kGainTrimReg = 0x02;
   static constexpr uint8_t kTrimReg = 0x03;
   static constexpr uint32_t kMtpBurnMs = 20;
