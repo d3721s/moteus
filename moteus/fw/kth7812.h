@@ -19,21 +19,35 @@
 #include "mbed.h"
 
 #include "fw/ccm.h"
+#include "fw/millisecond_timer.h"
 #include "fw/stm32_spi.h"
 
 namespace moteus {
 
 class KTH7812 {
  public:
+  static constexpr uint8_t kTrimNone = 0x00;
+  static constexpr uint8_t kTrimX = 0x01;
+  static constexpr uint8_t kTrimY = 0x80;
+  static constexpr uint8_t kTrimMask = kTrimX | kTrimY;
+
   struct Options : public Stm32Spi::Options {
     PinName mgh = NC;
     PinName mgl = NC;
+    uint8_t gt = 2;
+    uint8_t trim = kTrimNone;
 
     Options(const Stm32Spi::Options& v) : Stm32Spi::Options(v) {}
   };
 
-  KTH7812(const Options& options)
-      : spi_([&]() {
+  struct ConfigStatus {
+    uint8_t gt = 0;
+    uint8_t trim = kTrimNone;
+  };
+
+  KTH7812(MillisecondTimer* timer, const Options& options)
+      : timer_(timer),
+        spi_([&]() {
           auto copy = options;
           copy.mode = 3;
           copy.width = 16;
@@ -45,6 +59,8 @@ class KTH7812 {
     if (options.mgl != NC) {
       mgl_.emplace(options.mgl);
     }
+
+    error_ = SetConfig(options);
   }
 
   uint16_t Sample() MOTEUS_CCM_ATTRIBUTE {
@@ -67,12 +83,63 @@ class KTH7812 {
     return mgl_ && mgl_->read();
   }
 
- private:
-  static constexpr uint16_t kReadAngle = 0x0000;
+  bool error() const { return error_; }
 
+  ConfigStatus config_status() const { return config_status_; }
+
+ private:
+  bool SetConfig(const Options& options) {
+    bool result = false;
+
+    result |= SetRegister(kGainTrimReg, options.gt, 0xff,
+                          &config_status_.gt);
+
+    uint8_t trim_status = kTrimNone;
+    result |= SetRegister(kTrimReg, options.trim, kTrimMask, &trim_status);
+    config_status_.trim = trim_status & kTrimMask;
+
+    return result;
+  }
+
+  bool SetRegister(
+      uint8_t reg, uint8_t desired, uint8_t mask, uint8_t* final_value) {
+    const auto current_value = ReadRegister(reg);
+    if ((current_value & mask) == (desired & mask)) {
+      *final_value = current_value;
+      return false;
+    }
+
+    const uint8_t write_value =
+        (current_value & ~mask) | (desired & mask);
+    WriteRegister(reg, write_value);
+    timer_->wait_ms(20);
+
+    *final_value = ReadRegister(reg);
+    return (*final_value & mask) != (desired & mask);
+  }
+
+  uint8_t ReadRegister(uint8_t reg) {
+    spi_.write(kReadRegister | (reg << 8));
+    timer_->wait_us(2);
+    return spi_.write(kReadAngle) >> 8;
+  }
+
+  void WriteRegister(uint8_t reg, uint8_t value) {
+    spi_.write(kWriteRegister | (reg << 8) | value);
+  }
+
+  static constexpr uint16_t kReadAngle = 0x0000;
+  static constexpr uint16_t kReadRegister = 0x4000;
+  static constexpr uint16_t kWriteRegister = 0x8000;
+  static constexpr uint8_t kGainTrimReg = 0x02;
+  static constexpr uint8_t kTrimReg = 0x03;
+
+  MillisecondTimer* const timer_;
   Stm32Spi spi_;
   std::optional<DigitalIn> mgh_;
   std::optional<DigitalIn> mgl_;
+  ConfigStatus config_status_;
+  bool error_ = false;
 };
 
 }

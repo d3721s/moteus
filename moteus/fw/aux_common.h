@@ -52,7 +52,8 @@ struct Spi {
     Mode mode = kBoardDefault;
     uint32_t rate_hz = 12000000;
 
-    // For now, only the MA732/MA600 uses these.
+    // The MA732/MA600 use filter_us, bct, and trim.  The KTH7812 uses
+    // trim and gt.
     uint16_t filter_us = 64;
     uint8_t bct = 0;
 
@@ -65,6 +66,7 @@ struct Spi {
       kSize,
     };
     Trim trim = kNone;
+    uint8_t gt = 2;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -73,6 +75,7 @@ struct Spi {
       a->Visit(MJ_NVP(filter_us));
       a->Visit(MJ_NVP(bct));
       a->Visit(MJ_NVP(trim));
+      a->Visit(MJ_NVP(gt));
     }
   };
   struct Status {
@@ -85,6 +88,8 @@ struct Spi {
     uint16_t checksum_errors = 0;
     bool magnetic_field_high = false;
     bool magnetic_field_low = false;
+    Config::Trim trim = Config::kNone;
+    uint8_t gt = 0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -95,6 +100,8 @@ struct Spi {
       a->Visit(MJ_NVP(checksum_errors));
       a->Visit(MJ_NVP(magnetic_field_high));
       a->Visit(MJ_NVP(magnetic_field_low));
+      a->Visit(MJ_NVP(trim));
+      a->Visit(MJ_NVP(gt));
     }
   };
 };
@@ -493,6 +500,7 @@ enum class AuxError {
   kPwmPinError,
   kMaXXXConfigError,
   kBisscPinError,
+  kSpiConfigError,
 
   kLength,
 };
@@ -691,6 +699,7 @@ struct IsEnum<moteus::aux::AuxError> {
         { A::kPwmPinError, "pwm_pin_error" },
         { A::kMaXXXConfigError, "maxxx_config" },
         { A::kBisscPinError, "bissc_pin_error" },
+        { A::kSpiConfigError, "spi_config" },
       }};
   }
 };

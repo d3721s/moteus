@@ -447,9 +447,20 @@ class AuxPort {
       if (timer_->read_ms() > 10) {
         __disable_irq();
 
-        kth7812_.emplace(*kth7812_options_);
-        AddSampleType(SampleType::kKth7812, true, true);
-        kth7812_->Sample();
+        kth7812_.emplace(timer_, *kth7812_options_);
+        const auto config_status = kth7812_->config_status();
+        using T = aux::Spi::Config::Trim;
+        status_.spi.trim =
+            (config_status.trim == KTH7812::kTrimX) ? T::kTrimX :
+            (config_status.trim == KTH7812::kTrimY) ? T::kTrimY :
+            T::kNone;
+        status_.spi.gt = config_status.gt;
+        if (kth7812_->error()) {
+          status_.error = aux::AuxError::kSpiConfigError;
+        } else {
+          AddSampleType(SampleType::kKth7812, true, true);
+          kth7812_->Sample();
+        }
 
         __enable_irq();
       }
@@ -1303,6 +1314,13 @@ class AuxPort {
           if (options.frequency > 10000000) { options.frequency = 10000000; }
           options.mode = 3;
           options.timeout = 2000;
+          options.gt = config_.spi.gt;
+          using T = aux::Spi::Config::Trim;
+          options.trim =
+              (config_.spi.trim == T::kNone) ? KTH7812::kTrimNone :
+              (config_.spi.trim == T::kTrimX) ? KTH7812::kTrimX :
+              (config_.spi.trim == T::kTrimY) ? KTH7812::kTrimY :
+              KTH7812::kTrimNone;
           if (config_.spi.mode == aux::Spi::Config::kOnboardKth7812) {
             options.mgh = g_hw_pins.kth7812_mgh;
             options.mgl = g_hw_pins.kth7812_mgl;
