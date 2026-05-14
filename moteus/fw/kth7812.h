@@ -111,8 +111,8 @@ class KTH7812 {
 
     const uint8_t write_value =
         (current_value & ~mask) | (desired & mask);
-    WriteRegister(reg, write_value);
-    timer_->wait_ms(20);
+    BurnRegister(reg, write_value);
+    timer_->wait_ms(kMtpBurnMs);
 
     *final_value = ReadRegister(reg);
     return (*final_value & mask) != (desired & mask);
@@ -124,7 +124,9 @@ class KTH7812 {
     return spi_.write(kReadAngle) >> 8;
   }
 
-  void WriteRegister(uint8_t reg, uint8_t value) {
+  void BurnRegister(uint8_t reg, uint8_t value) {
+    // KTH7812 register writes are MTP burns.  After this command the device
+    // needs time to persist the value to non-volatile storage.
     spi_.write(kWriteRegister | (reg << 8) | value);
   }
 
@@ -133,6 +135,7 @@ class KTH7812 {
   static constexpr uint16_t kWriteRegister = 0x8000;
   static constexpr uint8_t kGainTrimReg = 0x02;
   static constexpr uint8_t kTrimReg = 0x03;
+  static constexpr uint32_t kMtpBurnMs = 20;
 
   MillisecondTimer* const timer_;
   Stm32Spi spi_;
