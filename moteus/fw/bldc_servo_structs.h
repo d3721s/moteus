@@ -504,7 +504,7 @@ struct BldcServoConfig {
   float current_sense_ohm =
       (g_measured_hw_family == 2 ? 0.002f :
        0.0005f);
-
+  float current_sense_ohm = 0.003f;
   // We pick a default maximum voltage based on the board revision.
   float max_voltage =
       g_measured_hw_family == 0 ?

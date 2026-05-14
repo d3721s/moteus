@@ -540,10 +540,12 @@ private:
       }
       case CONFIG_POS_GAIN: {
         servo_config.pid_position.kp = config_.pos_gain;
+        servo_config.pid_position.kd = config_.pos_gain * 0.01f;
         break;
       }
       case CONFIG_VEL_GAIN: {
         servo_config.pid_position.kp = config_.vel_gain;
+        servo_config.pid_position.kd = config_.vel_gain * 0.01f;
         break;
       }
       case CONFIG_VEL_INTEGRATOR_GAIN: {
