@@ -19,6 +19,7 @@
 #include <QScrollArea>
 #include <QSerialPort>
 #include <QSerialPortInfo>
+#include <QSizePolicy>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStyle>
@@ -164,8 +165,8 @@ SerialEncoderDebugTab::SerialEncoderDebugTab(QWidget *parent)
     auto *topLayout = new QVBoxLayout(top);
     topLayout->setContentsMargins(0, 0, 0, 0);
     topLayout->setSpacing(8);
-    topLayout->addWidget(createConnectionGroup());
-    topLayout->addWidget(createDataGroup());
+    topLayout->addWidget(createConnectionGroup(), 0);
+    topLayout->addWidget(createDataGroup(), 1);
 
     auto *writeRow = new QWidget(top);
     auto *writeLayout = new QHBoxLayout(writeRow);
@@ -173,7 +174,7 @@ SerialEncoderDebugTab::SerialEncoderDebugTab(QWidget *parent)
     writeLayout->setSpacing(8);
     writeLayout->addWidget(createEepromGroup(), 2);
     writeLayout->addWidget(createResetGroup(), 3);
-    topLayout->addWidget(writeRow);
+    topLayout->addWidget(writeRow, 0);
 
     auto *topScroll = new QScrollArea(this);
     topScroll->setWidgetResizable(true);
@@ -210,6 +211,8 @@ SerialEncoderDebugTab::~SerialEncoderDebugTab()
 QWidget *SerialEncoderDebugTab::createConnectionGroup()
 {
     auto *group = new QGroupBox(QStringLiteral("1. 串口连接 / 通信参数"), this);
+    group->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    group->setMaximumHeight(78);
     auto *layout = new QGridLayout(group);
     layout->setHorizontalSpacing(8);
     layout->setVerticalSpacing(6);
@@ -265,6 +268,7 @@ QWidget *SerialEncoderDebugTab::createConnectionGroup()
 QWidget *SerialEncoderDebugTab::createDataGroup()
 {
     auto *group = new QGroupBox(QStringLiteral("2. 位置数据读取 / 连续采样"), this);
+    group->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     auto *layout = new QGridLayout(group);
     layout->setHorizontalSpacing(8);
     layout->setVerticalSpacing(6);
