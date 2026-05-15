@@ -382,6 +382,10 @@ void MainWindow::showSpiDebugDialog()
     if (!m_spiDebugDialog) {
         auto *dialog = new QDialog(this);
         dialog->setWindowTitle(QStringLiteral("编码器SPI调试"));
+        dialog->setWindowFlags(dialog->windowFlags()
+                               | Qt::WindowMinimizeButtonHint
+                               | Qt::WindowMaximizeButtonHint
+                               | Qt::WindowCloseButtonHint);
         dialog->resize(1260, 860);
         auto *layout = new QVBoxLayout(dialog);
         layout->setContentsMargins(6, 6, 6, 6);
@@ -399,6 +403,10 @@ void MainWindow::showSerialEncoderDebugDialog()
     if (!m_serialEncoderDebugDialog) {
         auto *dialog = new QDialog(this);
         dialog->setWindowTitle(QStringLiteral("串口编码器调试"));
+        dialog->setWindowFlags(dialog->windowFlags()
+                               | Qt::WindowMinimizeButtonHint
+                               | Qt::WindowMaximizeButtonHint
+                               | Qt::WindowCloseButtonHint);
         dialog->resize(1120, 760);
         auto *layout = new QVBoxLayout(dialog);
         layout->setContentsMargins(6, 6, 6, 6);
