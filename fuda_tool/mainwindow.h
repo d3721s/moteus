@@ -91,6 +91,7 @@ private:
     void setFlagLabel(QLabel *label, bool active);
     void setConnectionState(bool connected, const QString &message);
     void showSpiDebugDialog();
+    void showSerialEncoderDebugDialog();
 
     quint8 currentNodeId() const;
     QString commandInputText(quint8 commandId) const;
@@ -116,6 +117,7 @@ private:
     CanService *m_canService = nullptr;
     QWidget *m_canContentArea = nullptr;
     QPointer<QDialog> m_spiDebugDialog;
+    QPointer<QDialog> m_serialEncoderDebugDialog;
 
     QLineEdit *m_interfaceEdit = nullptr;
     QSpinBox *m_nodeSpin = nullptr;

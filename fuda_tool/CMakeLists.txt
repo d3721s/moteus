@@ -21,6 +21,8 @@ qt_add_executable(fuda_tool
     payloadcodec.h
     protocol.cpp
     protocol.h
+    serialencoderdebugtab.cpp
+    serialencoderdebugtab.h
     spiencoderdebugtab.cpp
     spiencoderdebugtab.h
 )

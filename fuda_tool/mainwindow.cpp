@@ -4,6 +4,7 @@
 #include "canidcodec.h"
 #include "canservice.h"
 #include "payloadcodec.h"
+#include "serialencoderdebugtab.h"
 #include "spiencoderdebugtab.h"
 
 #include <QApplication>
@@ -336,6 +337,7 @@ QWidget *MainWindow::createConnectionPanel()
     auto *connectButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("连接"), box);
     auto *disconnectButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("断开"), box);
     auto *spiDebugButton = new QPushButton(QStringLiteral("进入SPI调试"), box);
+    auto *serialEncoderDebugButton = new QPushButton(QStringLiteral("串口编码器调试"), box);
     m_connectionStateLabel = new QLabel(box);
     m_connectionStateLabel->setObjectName(QStringLiteral("connectionState"));
 
@@ -354,8 +356,9 @@ QWidget *MainWindow::createConnectionPanel()
     layout->addWidget(connectButton, 0, 9);
     layout->addWidget(disconnectButton, 0, 10);
     layout->addWidget(spiDebugButton, 0, 11);
-    layout->addWidget(m_connectionStateLabel, 0, 12);
-    layout->setColumnStretch(12, 1);
+    layout->addWidget(serialEncoderDebugButton, 0, 12);
+    layout->addWidget(m_connectionStateLabel, 0, 13);
+    layout->setColumnStretch(13, 1);
 
     connect(connectButton, &QPushButton::clicked, this, [this]() {
         const QString interfaceName = m_interfaceEdit->text().trimmed();
@@ -369,6 +372,7 @@ QWidget *MainWindow::createConnectionPanel()
     });
     connect(disconnectButton, &QPushButton::clicked, this, &MainWindow::disconnectCanInterfaceRequested);
     connect(spiDebugButton, &QPushButton::clicked, this, &MainWindow::showSpiDebugDialog);
+    connect(serialEncoderDebugButton, &QPushButton::clicked, this, &MainWindow::showSerialEncoderDebugDialog);
 
     return box;
 }
@@ -388,6 +392,23 @@ void MainWindow::showSpiDebugDialog()
     m_spiDebugDialog->show();
     m_spiDebugDialog->raise();
     m_spiDebugDialog->activateWindow();
+}
+
+void MainWindow::showSerialEncoderDebugDialog()
+{
+    if (!m_serialEncoderDebugDialog) {
+        auto *dialog = new QDialog(this);
+        dialog->setWindowTitle(QStringLiteral("串口编码器调试"));
+        dialog->resize(1120, 760);
+        auto *layout = new QVBoxLayout(dialog);
+        layout->setContentsMargins(6, 6, 6, 6);
+        layout->addWidget(new SerialEncoderDebugTab(dialog));
+        m_serialEncoderDebugDialog = dialog;
+    }
+
+    m_serialEncoderDebugDialog->show();
+    m_serialEncoderDebugDialog->raise();
+    m_serialEncoderDebugDialog->activateWindow();
 }
 
 QWidget *MainWindow::createCommandPanel()
