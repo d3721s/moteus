@@ -375,11 +375,11 @@ QWidget *SerialEncoderDebugTab::createEepromGroup()
     layout->addWidget(m_eepromAddrSpin, 0, 1);
     layout->addWidget(new QLabel(QStringLiteral("数据 EDF"), group), 0, 2);
     layout->addWidget(m_eepromValueSpin, 0, 3);
-    layout->addWidget(m_eepromReadButton, 1, 0, 1, 2);
-    layout->addWidget(m_eepromWriteButton, 1, 2, 1, 2);
-    layout->addWidget(new QLabel(QStringLiteral("状态"), group), 2, 0);
-    layout->addWidget(m_eepromStateEdit, 2, 1, 1, 3);
-    layout->setColumnStretch(3, 1);
+    layout->addWidget(m_eepromReadButton, 0, 4);
+    layout->addWidget(m_eepromWriteButton, 0, 5);
+    layout->addWidget(new QLabel(QStringLiteral("状态"), group), 0, 6);
+    layout->addWidget(m_eepromStateEdit, 0, 7);
+    layout->setColumnStretch(7, 1);
 
     connect(m_eepromReadButton, &QPushButton::clicked, this, &SerialEncoderDebugTab::onEepromReadClicked);
     connect(m_eepromWriteButton, &QPushButton::clicked, this, &SerialEncoderDebugTab::onEepromWriteClicked);
@@ -405,10 +405,10 @@ QWidget *SerialEncoderDebugTab::createResetGroup()
     layout->addWidget(m_resetFaultButton, 0, 0);
     layout->addWidget(m_zeroSingleTurnButton, 0, 1);
     layout->addWidget(m_resetMultiTurnButton, 0, 2);
-    layout->addWidget(new QLabel(QStringLiteral("状态"), group), 1, 0);
-    layout->addWidget(m_resetStateEdit, 1, 1, 1, 2);
-    layout->addWidget(note, 2, 0, 1, 3);
-    layout->setColumnStretch(2, 1);
+    layout->addWidget(new QLabel(QStringLiteral("状态"), group), 0, 3);
+    layout->addWidget(m_resetStateEdit, 0, 4);
+    layout->addWidget(note, 1, 0, 1, 5);
+    layout->setColumnStretch(4, 1);
 
     connect(m_resetFaultButton, &QPushButton::clicked, this, &SerialEncoderDebugTab::onResetFaultClicked);
     connect(m_zeroSingleTurnButton, &QPushButton::clicked, this, &SerialEncoderDebugTab::onZeroSingleTurnClicked);
