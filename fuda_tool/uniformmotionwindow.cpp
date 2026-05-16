@@ -1,9 +1,11 @@
 #include "uniformmotionwindow.h"
 
 #include <QDoubleSpinBox>
+#include <QDoubleValidator>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
@@ -165,6 +167,11 @@ UniformMotionWindow::UniformMotionWindow(QWidget *parent)
     m_thresholdSpin->setValue(2.0);
     m_thresholdSpin->setSuffix(QStringLiteral(" %"));
 
+    m_initialSpeedEdit = new QLineEdit(controls);
+    m_initialSpeedEdit->setPlaceholderText(QStringLiteral("自动"));
+    m_initialSpeedEdit->setValidator(new QDoubleValidator(-1000000.0, 1000000.0, 3, m_initialSpeedEdit));
+    m_initialSpeedEdit->setToolTip(QStringLiteral("非 0 时按 (瞬时转速 - 速度初值) / |速度初值| 计算速度变化率；留空或 0 时自动使用窗口均值。"));
+
     m_clearButton = new QPushButton(QStringLiteral("清空曲线"), controls);
     m_sampleCountLabel = metricLabel();
     m_speedLabel = metricLabel();
@@ -176,7 +183,9 @@ UniformMotionWindow::UniformMotionWindow(QWidget *parent)
     grid->addWidget(m_windowSpin, 0, 1);
     grid->addWidget(new QLabel(QStringLiteral("波动阈值"), controls), 0, 2);
     grid->addWidget(m_thresholdSpin, 0, 3);
-    grid->addWidget(m_clearButton, 0, 4);
+    grid->addWidget(new QLabel(QStringLiteral("速度初值(rpm)"), controls), 0, 4);
+    grid->addWidget(m_initialSpeedEdit, 0, 5);
+    grid->addWidget(m_clearButton, 0, 6);
     grid->addWidget(new QLabel(QStringLiteral("样本"), controls), 1, 0);
     grid->addWidget(m_sampleCountLabel, 1, 1);
     grid->addWidget(new QLabel(QStringLiteral("瞬时转速"), controls), 1, 2);
@@ -196,6 +205,7 @@ UniformMotionWindow::UniformMotionWindow(QWidget *parent)
     connect(m_clearButton, &QPushButton::clicked, this, &UniformMotionWindow::clearSamples);
     connect(m_windowSpin, &QSpinBox::valueChanged, this, [this](int) { updateStats(); });
     connect(m_thresholdSpin, &QDoubleSpinBox::valueChanged, this, [this](double) { updateStats(); });
+    connect(m_initialSpeedEdit, &QLineEdit::textChanged, this, [this](const QString &) { updateStats(); });
 
     updateStats();
 }
@@ -272,23 +282,30 @@ void UniformMotionWindow::updateStats()
         mean /= double(windowCount);
     }
 
+    bool initialSpeedOk = false;
+    const double initialSpeedRpm = m_initialSpeedEdit ? m_initialSpeedEdit->text().trimmed().toDouble(&initialSpeedOk) : 0.0;
+    const bool useInitialSpeed = initialSpeedOk && std::abs(initialSpeedRpm) >= MinMeanSpeedRpm;
+
     double maxDeviation = 0.0;
-    if (std::abs(mean) >= MinMeanSpeedRpm) {
+    if (useInitialSpeed || std::abs(mean) >= MinMeanSpeedRpm) {
         for (int i = 0; i < count; ++i) {
-            double sampleMean = mean;
-            const int localStart = std::max(0, i - window + 1);
-            const int localCount = i - localStart + 1;
-            if (localCount > 0) {
-                sampleMean = 0.0;
-                for (int j = localStart; j <= i; ++j) {
-                    sampleMean += m_samples.at(j).speedRpm;
+            double referenceSpeed = initialSpeedRpm;
+            if (!useInitialSpeed) {
+                referenceSpeed = mean;
+                const int localStart = std::max(0, i - window + 1);
+                const int localCount = i - localStart + 1;
+                if (localCount > 0) {
+                    referenceSpeed = 0.0;
+                    for (int j = localStart; j <= i; ++j) {
+                        referenceSpeed += m_samples.at(j).speedRpm;
+                    }
+                    referenceSpeed /= double(localCount);
                 }
-                sampleMean /= double(localCount);
             }
 
             double deviation = 0.0;
-            if (std::abs(sampleMean) >= MinMeanSpeedRpm) {
-                deviation = (m_samples.at(i).speedRpm - sampleMean) / std::abs(sampleMean) * 100.0;
+            if (std::abs(referenceSpeed) >= MinMeanSpeedRpm) {
+                deviation = (m_samples.at(i).speedRpm - referenceSpeed) / std::abs(referenceSpeed) * 100.0;
             }
             m_samples[i].deviationPercent = deviation;
             if (i >= start) {

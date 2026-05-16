@@ -5,6 +5,7 @@
 #include <QVector>
 
 class QLabel;
+class QLineEdit;
 class QPushButton;
 class QSpinBox;
 class QDoubleSpinBox;
@@ -40,6 +41,7 @@ private:
     QLabel *m_stateLabel = nullptr;
     QSpinBox *m_windowSpin = nullptr;
     QDoubleSpinBox *m_thresholdSpin = nullptr;
+    QLineEdit *m_initialSpeedEdit = nullptr;
     QPushButton *m_clearButton = nullptr;
 
     QVector<SpeedSample> m_samples;
