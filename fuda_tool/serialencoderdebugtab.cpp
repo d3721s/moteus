@@ -927,6 +927,23 @@ void SerialEncoderDebugTab::setDataStatus(const EncoderData &data)
     appendMessage(data.summary);
 }
 
+void SerialEncoderDebugTab::publishMotionSample(const EncoderData &data)
+{
+    if (!data.ok || !data.hasRaw || data.resolutionBits <= 0) {
+        return;
+    }
+
+    const quint64 resolution = resolutionValue(data.resolutionBits);
+    if (resolution == 0) {
+        return;
+    }
+
+    const double positionTurns = data.hasTotal ? double(data.totalRaw) / double(resolution)
+                                               : double(data.raw) / double(resolution);
+    const double timestampSec = double(QDateTime::currentMSecsSinceEpoch()) / 1000.0;
+    emit encoderPositionSampled(timestampSec, positionTurns, data.angleDeg, data.hasTotal);
+}
+
 void SerialEncoderDebugTab::appendMessage(const QString &message)
 {
     const QString ts = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss.zzz"));
@@ -964,6 +981,7 @@ void SerialEncoderDebugTab::onReadAbsoluteClicked()
     if (data.ok && data.hasRaw) {
         ++m_sampleIndex;
         m_chart->appendPoint(m_sampleIndex, data.angleDeg);
+        publishMotionSample(data);
     }
 }
 
@@ -979,7 +997,9 @@ void SerialEncoderDebugTab::onReadIdClicked()
 
 void SerialEncoderDebugTab::onReadAllClicked()
 {
-    setDataStatus(readDataCommand(0x1A));
+    const EncoderData data = readDataCommand(0x1A);
+    setDataStatus(data);
+    publishMotionSample(data);
 }
 
 void SerialEncoderDebugTab::onReadPositionClicked()
@@ -992,7 +1012,9 @@ void SerialEncoderDebugTab::onReadPositionClicked()
         setDataStatus(errorData);
         return;
     }
-    setDataStatus(readDataCommand(bits == 25 ? 0x2A : 0x2B));
+    const EncoderData data = readDataCommand(bits == 25 ? 0x2A : 0x2B);
+    setDataStatus(data);
+    publishMotionSample(data);
 }
 
 void SerialEncoderDebugTab::onEepromReadClicked()
@@ -1137,6 +1159,7 @@ void SerialEncoderDebugTab::onSamplingTick()
 
     ++m_sampleIndex;
     m_chart->appendPoint(m_sampleIndex, data.angleDeg);
+    publishMotionSample(data);
 }
 
 QByteArray SerialEncoderDebugTab::buildFrame(std::initializer_list<quint8> bytesWithoutCrc)

@@ -24,6 +24,9 @@ public:
     explicit SerialEncoderDebugTab(QWidget *parent = nullptr);
     ~SerialEncoderDebugTab() override;
 
+signals:
+    void encoderPositionSampled(double timestampSec, double positionTurns, double angleDeg, bool continuousPosition);
+
 private:
     struct EncoderData
     {
@@ -79,6 +82,7 @@ private:
     bool readResponse(quint8 expectedCommand, int expectedLength, QByteArray *response, int timeoutMs, QString *error);
 
     void setDataStatus(const EncoderData &data);
+    void publishMotionSample(const EncoderData &data);
     void appendMessage(const QString &message);
     void appendFrameLog(const QString &prefix, const QByteArray &frame);
 

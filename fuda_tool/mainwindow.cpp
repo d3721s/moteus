@@ -6,6 +6,7 @@
 #include "payloadcodec.h"
 #include "serialencoderdebugtab.h"
 #include "spiencoderdebugtab.h"
+#include "uniformmotionwindow.h"
 
 #include <QApplication>
 #include <QAbstractItemView>
@@ -410,13 +411,30 @@ void MainWindow::showSerialEncoderDebugDialog()
         dialog->resize(1120, 760);
         auto *layout = new QVBoxLayout(dialog);
         layout->setContentsMargins(6, 6, 6, 6);
-        layout->addWidget(new SerialEncoderDebugTab(dialog));
+        auto *tab = new SerialEncoderDebugTab(dialog);
+        layout->addWidget(tab);
+        m_serialEncoderDebugTab = tab;
+        connect(tab,
+                &SerialEncoderDebugTab::encoderPositionSampled,
+                this,
+                [this](double timestampSec, double positionTurns, double angleDeg, bool continuousPosition) {
+                    if (m_uniformMotionWindow) {
+                        m_uniformMotionWindow->addEncoderSample(timestampSec, positionTurns, angleDeg, continuousPosition);
+                    }
+                });
         m_serialEncoderDebugDialog = dialog;
+    }
+
+    if (!m_uniformMotionWindow) {
+        m_uniformMotionWindow = new UniformMotionWindow(this);
     }
 
     m_serialEncoderDebugDialog->show();
     m_serialEncoderDebugDialog->raise();
     m_serialEncoderDebugDialog->activateWindow();
+    m_uniformMotionWindow->show();
+    m_uniformMotionWindow->raise();
+    m_uniformMotionWindow->activateWindow();
 }
 
 QWidget *MainWindow::createCommandPanel()

@@ -25,6 +25,8 @@ qt_add_executable(fuda_tool
     serialencoderdebugtab.h
     spiencoderdebugtab.cpp
     spiencoderdebugtab.h
+    uniformmotionwindow.cpp
+    uniformmotionwindow.h
 )
 
 set_property(TARGET fuda_tool PROPERTY AUTOGEN_COMMAND_LINE_LENGTH_MAX 32768)

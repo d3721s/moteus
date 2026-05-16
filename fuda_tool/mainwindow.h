@@ -24,6 +24,8 @@ class QTableWidget;
 class QTableWidgetItem;
 class QThread;
 class QWidget;
+class SerialEncoderDebugTab;
+class UniformMotionWindow;
 
 class MainWindow : public QMainWindow
 {
@@ -118,6 +120,8 @@ private:
     QWidget *m_canContentArea = nullptr;
     QPointer<QDialog> m_spiDebugDialog;
     QPointer<QDialog> m_serialEncoderDebugDialog;
+    QPointer<SerialEncoderDebugTab> m_serialEncoderDebugTab;
+    QPointer<UniformMotionWindow> m_uniformMotionWindow;
 
     QLineEdit *m_interfaceEdit = nullptr;
     QSpinBox *m_nodeSpin = nullptr;
