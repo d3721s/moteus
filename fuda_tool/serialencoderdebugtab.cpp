@@ -288,7 +288,7 @@ QWidget *SerialEncoderDebugTab::createDataGroup()
     m_startSamplingButton = new QPushButton(QStringLiteral("开始角度采样"), group);
     m_stopSamplingButton = new QPushButton(QStringLiteral("停止采样"), group);
     m_samplingIntervalSpin = new QSpinBox(group);
-    m_samplingIntervalSpin->setRange(5, 2000);
+    m_samplingIntervalSpin->setRange(0, 2000);
     m_samplingIntervalSpin->setSuffix(QStringLiteral(" ms"));
 
     m_idStateEdit = new QLineEdit(group);
