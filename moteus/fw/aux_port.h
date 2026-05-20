@@ -517,7 +517,7 @@ class AuxPort {
       if (timer_->read_ms() > 10) {
         __disable_irq();
 
-        kth7111_.emplace(timer_, *kth7111_options_);
+        kth7111_.emplace(*kth7111_options_);
         const auto config_status = kth7111_->config_status();
         status_.spi.kth7111_reg_cal = config_status.reg_cal;
         status_.spi.kth7111_anlc_en = config_status.anlc_en;
@@ -527,7 +527,7 @@ class AuxPort {
           status_.error = aux::AuxError::kSpiConfigError;
         } else {
           AddSampleType(SampleType::kKth7111, true, true);
-          kth7111_->Sample();
+          static_cast<void>(kth7111_->Sample());
         }
 
         __enable_irq();

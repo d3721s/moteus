@@ -51,6 +51,11 @@ class KTH7111 {
     error_ = SetConfig(options);
   }
 
+  uint32_t Sample() {
+    StartSample();
+    return FinishSample().value;
+  }
+
   void StartSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     cs_.clear();
     FrameDelay();
