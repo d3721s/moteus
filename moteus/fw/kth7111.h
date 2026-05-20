@@ -17,7 +17,6 @@
 #include "mbed.h"
 
 #include "fw/ccm.h"
-#include "fw/stm32_digital_output.h"
 #include "fw/stm32_spi.h"
 
 namespace moteus {
@@ -26,7 +25,7 @@ class KTH7111 {
  public:
   struct Options : public Stm32Spi::Options {
     uint8_t reg_cal = 0;
-    uint8_t anlc_en = 1;
+    uint8_t anlc_en = 0;
     uint8_t gaintrim = 0xac;
 
     Options(const Stm32Spi::Options& v) : Stm32Spi::Options(v) {}
@@ -45,9 +44,12 @@ class KTH7111 {
   };
 
   KTH7111(const Options& options)
-      : sda_(options.mosi, options.miso),
-        cs_(options.cs, 1),
-        sck_(options.sck, 1) {
+      : spi_([&]() {
+               auto copy = options;
+               copy.mode = 3;
+               copy.width = 8;
+               return copy;
+             }()) {
     error_ = SetConfig(options);
   }
 
@@ -57,19 +59,18 @@ class KTH7111 {
   }
 
   void StartSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
-    cs_.clear();
-    FrameDelay();
-    sda_.output();
-    TransferWrite(kReadAngle);
-    sda_.input();
+    tx_[0] = kReadAngle;
+    tx_[1] = 0x00;
+    tx_[2] = 0x00;
+    tx_[3] = 0x00;
+    StartDma(kAngleFrameSize);
   }
 
   SampleResult FinishSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
-    const uint8_t angle15_8 = TransferRead();
-    const uint8_t angle7_0 = TransferRead();
-    const uint8_t crc = TransferRead();
-    FrameDelay();
-    cs_.set();
+    spi_.finish_dma_transfer();
+    const uint8_t angle15_8 = rx_[1];
+    const uint8_t angle7_0 = rx_[2];
+    const uint8_t crc = rx_[3];
 
     const uint32_t raw =
         (static_cast<uint32_t>(angle15_8) << 8) |
@@ -82,93 +83,6 @@ class KTH7111 {
   ConfigStatus config_status() const { return config_status_; }
 
  private:
-  class BidirPin {
-   public:
-    BidirPin(PinName output_pin, PinName input_pin)
-        : output_(GetGpio(output_pin), output_pin),
-          input_(GetGpio(input_pin == NC ? output_pin : input_pin),
-                 input_pin == NC ? output_pin : input_pin) {
-      write(1);
-      input();
-      input_.set_input();
-    }
-
-    void output() MOTEUS_CCM_ATTRIBUTE {
-      output_.set_output();
-    }
-
-    void input() MOTEUS_CCM_ATTRIBUTE {
-      output_.set_input();
-    }
-
-    void write(int value) MOTEUS_CCM_ATTRIBUTE {
-      output_.write(value);
-    }
-
-    bool read() const MOTEUS_CCM_ATTRIBUTE {
-      return input_.read();
-    }
-
-   private:
-    class Pin {
-     public:
-      Pin(GPIO_TypeDef* gpio, PinName pin)
-          : moder_(&gpio->MODER),
-            idr_(&gpio->IDR),
-            bsrr_(&gpio->BSRR),
-            brr_(&gpio->BRR),
-            offset_(static_cast<uint32_t>(pin) & 0x0f),
-            mask_(1 << offset_),
-            mode_mask_(0x3 << (offset_ * 2)) {}
-
-      void set_output() MOTEUS_CCM_ATTRIBUTE {
-        *moder_ = (*moder_ & ~mode_mask_) | (1 << (offset_ * 2));
-      }
-
-      void set_input() MOTEUS_CCM_ATTRIBUTE {
-        *moder_ = (*moder_ & ~mode_mask_);
-      }
-
-      void write(int value) MOTEUS_CCM_ATTRIBUTE {
-        if (value) {
-          *bsrr_ = mask_;
-        } else {
-          *brr_ = mask_;
-        }
-      }
-
-      bool read() const MOTEUS_CCM_ATTRIBUTE {
-        return (*idr_ & mask_) != 0;
-      }
-
-     private:
-      volatile uint32_t* const moder_;
-      volatile uint32_t* const idr_;
-      volatile uint32_t* const bsrr_;
-      volatile uint32_t* const brr_;
-      const uint32_t offset_;
-      const uint32_t mask_;
-      const uint32_t mode_mask_;
-    };
-
-    static GPIO_TypeDef* GetGpio(PinName pin) {
-      const uint32_t port_index = STM_PORT(pin);
-      switch (port_index) {
-        case PortA: return reinterpret_cast<GPIO_TypeDef*>(GPIOA_BASE);
-        case PortB: return reinterpret_cast<GPIO_TypeDef*>(GPIOB_BASE);
-        case PortC: return reinterpret_cast<GPIO_TypeDef*>(GPIOC_BASE);
-        case PortD: return reinterpret_cast<GPIO_TypeDef*>(GPIOD_BASE);
-        case PortE: return reinterpret_cast<GPIO_TypeDef*>(GPIOE_BASE);
-        case PortF: return reinterpret_cast<GPIO_TypeDef*>(GPIOF_BASE);
-      }
-      MJ_ASSERT(false);
-      return reinterpret_cast<GPIO_TypeDef*>(GPIOA_BASE);
-    }
-
-    Pin output_;
-    Pin input_;
-  };
-
   bool SetConfig(const Options& options) {
     bool result = false;
 
@@ -236,16 +150,13 @@ class KTH7111 {
   }
 
   uint8_t ReadRegister(uint8_t reg, bool* ok) {
-    cs_.clear();
-    FrameDelay();
-    sda_.output();
-    TransferWrite(kReadRegister);
-    TransferWrite(reg);
-    sda_.input();
-    const uint8_t value = TransferRead();
-    const uint8_t crc = TransferRead();
-    FrameDelay();
-    cs_.set();
+    tx_[0] = kReadRegister;
+    tx_[1] = reg;
+    tx_[2] = 0x00;
+    tx_[3] = 0x00;
+    DmaTransfer(kRegisterReadFrameSize);
+    const uint8_t value = rx_[2];
+    const uint8_t crc = rx_[3];
 
     *ok = (crc == CalculateCrc(value));
     return value;
@@ -260,68 +171,29 @@ class KTH7111 {
   }
 
   void WriteKey(uint32_t key) {
-    cs_.clear();
-    FrameDelay();
-    sda_.output();
-    TransferWrite(key >> 24);
-    TransferWrite(key >> 16);
-    TransferWrite(key >> 8);
-    TransferWrite(key);
-    sda_.input();
-    FrameDelay();
-    cs_.set();
+    tx_[0] = key >> 24;
+    tx_[1] = key >> 16;
+    tx_[2] = key >> 8;
+    tx_[3] = key;
+    DmaTransfer(kKeyFrameSize);
   }
 
   void WriteRegister(uint8_t reg, uint8_t value) {
-    cs_.clear();
-    FrameDelay();
-    sda_.output();
-    TransferWrite(kWriteRegister);
-    TransferWrite(reg);
-    TransferWrite(value);
-    sda_.input();
-    FrameDelay();
-    cs_.set();
+    tx_[0] = kWriteRegister;
+    tx_[1] = reg;
+    tx_[2] = value;
+    DmaTransfer(kRegisterWriteFrameSize);
   }
 
-  void TransferWrite(uint8_t value) MOTEUS_CCM_NOINLINE_ATTRIBUTE {
-    for (int i = 7; i >= 0; i--) {
-      sda_.write((value & (1 << i)) ? 1 : 0);
-      sck_.clear();
-      Delay();
-      sck_.set();
-      Delay();
-    }
+  void DmaTransfer(int size) {
+    StartDma(size);
+    spi_.finish_dma_transfer();
   }
 
-  uint8_t TransferRead() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
-    uint8_t result = 0;
-    for (int i = 7; i >= 0; i--) {
-      sck_.clear();
-      Delay();
-      sck_.set();
-      Delay();
-      result = (result << 1) | (sda_.read() ? 1 : 0);
-    }
-    return result;
-  }
-
-  static void Delay() MOTEUS_CCM_ATTRIBUTE {
-    __asm__ volatile("nop");
-    __asm__ volatile("nop");
-    __asm__ volatile("nop");
-    __asm__ volatile("nop");
-    __asm__ volatile("nop");
-    __asm__ volatile("nop");
-    __asm__ volatile("nop");
-    __asm__ volatile("nop");
-  }
-
-  static void FrameDelay() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
-    Delay();
-    Delay();
-    Delay();
-    Delay();
+  void StartDma(int size) MOTEUS_CCM_ATTRIBUTE {
+    spi_.start_dma_transfer(
+        std::string_view(reinterpret_cast<const char*>(&tx_[0]), size),
+        mjlib::base::string_span(reinterpret_cast<char*>(&rx_[0]), size));
   }
 
   static uint8_t CalculateCrc(uint8_t value) MOTEUS_CCM_NOINLINE_ATTRIBUTE {
@@ -357,10 +229,15 @@ class KTH7111 {
   static constexpr uint8_t kAnlcEnableBit = 0x08;
   static constexpr uint8_t kAnlcStatusMask = 0x30;
   static constexpr uint8_t kAnlcStatusShift = 4;
+  static constexpr int kAngleFrameSize = 4;
+  static constexpr int kRegisterReadFrameSize = 4;
+  static constexpr int kRegisterWriteFrameSize = 3;
+  static constexpr int kKeyFrameSize = 4;
+  static constexpr int kMaxFrameSize = 4;
 
-  BidirPin sda_;
-  Stm32DigitalOutput cs_;
-  Stm32DigitalOutput sck_;
+  Stm32Spi spi_;
+  uint8_t tx_[kMaxFrameSize] = {};
+  uint8_t rx_[kMaxFrameSize] = {};
   ConfigStatus config_status_;
   bool error_ = false;
 };

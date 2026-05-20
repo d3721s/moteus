@@ -1426,6 +1426,8 @@ class AuxPort {
         case aux::Spi::Config::kOnboardMt6826: {
           MT6826::Options options = spi_options;
           options.timeout = 2000;
+          options.rx_dma = dma_channels_[0];
+          options.tx_dma = dma_channels_[1];
           mt6826_options_ = options;
           break;
         }
@@ -1454,6 +1456,8 @@ class AuxPort {
           KTH7111::Options options = spi_options;
           if (options.frequency > 10000000) { options.frequency = 10000000; }
           options.timeout = 2000;
+          options.rx_dma = dma_channels_[0];
+          options.tx_dma = dma_channels_[1];
           options.reg_cal = config_.spi.kth7111_reg_cal;
           options.anlc_en = config_.spi.kth7111_anlc_en;
           options.gaintrim = config_.spi.kth7111_gaintrim;

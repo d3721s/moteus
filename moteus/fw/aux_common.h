@@ -72,7 +72,7 @@ struct Spi {
     Trim trim = kNone;
     uint8_t gt = 2;
     uint8_t kth7111_reg_cal = 0;
-    uint8_t kth7111_anlc_en = 1;
+    uint8_t kth7111_anlc_en = 0;
     uint8_t kth7111_gaintrim = 0xac;
 
     template <typename Archive>
