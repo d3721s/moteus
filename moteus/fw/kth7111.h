@@ -17,7 +17,6 @@
 #include "mbed.h"
 
 #include "fw/ccm.h"
-#include "fw/millisecond_timer.h"
 #include "fw/stm32_digital_output.h"
 #include "fw/stm32_spi.h"
 
@@ -45,17 +44,11 @@ class KTH7111 {
     uint8_t anlc_status = 0;
   };
 
-  KTH7111(MillisecondTimer* timer, const Options& options)
-      : timer_(timer),
-        sda_(options.mosi, options.miso),
+  KTH7111(const Options& options)
+      : sda_(options.mosi, options.miso),
         cs_(options.cs, 1),
         sck_(options.sck, 1) {
     error_ = SetConfig(options);
-  }
-
-  uint32_t Sample() {
-    StartSample();
-    return FinishSample().value;
   }
 
   void StartSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
@@ -82,16 +75,6 @@ class KTH7111 {
   bool error() const { return error_; }
 
   ConfigStatus config_status() const { return config_status_; }
-
-  bool anlc_status_poll_due() const {
-    return timer_->ms_since_boot() >= next_anlc_status_poll_ms_;
-  }
-
-  bool PollMillisecond() {
-    next_anlc_status_poll_ms_ =
-        timer_->ms_since_boot() + kAnlcStatusPollMs;
-    return UpdateAnlcStatus();
-  }
 
  private:
   class BidirPin {
@@ -205,8 +188,6 @@ class KTH7111 {
         (final_anlc_config & kAnlcEnableBit) ? 1 : 0;
 
     result |= !UpdateAnlcStatus();
-    next_anlc_status_poll_ms_ =
-        timer_->ms_since_boot() + kAnlcStatusPollMs;
 
     return result;
   }
@@ -371,14 +352,11 @@ class KTH7111 {
   static constexpr uint8_t kAnlcEnableBit = 0x08;
   static constexpr uint8_t kAnlcStatusMask = 0x30;
   static constexpr uint8_t kAnlcStatusShift = 4;
-  static constexpr uint32_t kAnlcStatusPollMs = 100;
 
-  MillisecondTimer* const timer_;
   BidirPin sda_;
   Stm32DigitalOutput cs_;
   Stm32DigitalOutput sck_;
   ConfigStatus config_status_;
-  uint32_t next_anlc_status_poll_ms_ = 0;
   bool error_ = false;
 };
 

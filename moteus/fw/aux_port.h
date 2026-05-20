@@ -209,7 +209,6 @@ class AuxPort {
         }
         case SampleType::kMt6826: {
           const auto sample = mt6826_->FinishSample();
-          status_.spi.ic_pz_bits = sample.status;
           if (!sample.valid) {
             status_.spi.checksum_errors++;
             break;
@@ -484,7 +483,8 @@ class AuxPort {
 
         mt6826_.emplace(*mt6826_options_);
         AddSampleType(SampleType::kMt6826, true, true);
-        mt6826_->Sample();
+        mt6826_->StartSample();
+        status_.spi.ic_pz_bits = mt6826_->FinishSample().status;
 
         __enable_irq();
       }
@@ -532,18 +532,6 @@ class AuxPort {
 
         __enable_irq();
       }
-    }
-    if (kth7111_ && kth7111_->anlc_status_poll_due()) {
-      __disable_irq();
-      if (!kth7111_->PollMillisecond()) {
-        status_.error = aux::AuxError::kSpiConfigError;
-      }
-      const auto config_status = kth7111_->config_status();
-      status_.spi.kth7111_reg_cal = config_status.reg_cal;
-      status_.spi.kth7111_anlc_en = config_status.anlc_en;
-      status_.spi.kth7111_gaintrim = config_status.gaintrim;
-      status_.spi.kth7111_anlc_status = config_status.anlc_status;
-      __enable_irq();
     }
 
     if (ic_pz_) {

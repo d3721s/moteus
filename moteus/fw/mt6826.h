@@ -39,11 +39,6 @@ class MT6826 {
         sck_(options.sck, 1) {
   }
 
-  uint32_t Sample() {
-    StartSample();
-    return FinishSample().value;
-  }
-
   void StartSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     cs_.clear();
     Delay();
