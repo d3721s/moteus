@@ -520,6 +520,9 @@ class AuxPort {
         kth7111_.emplace(timer_, *kth7111_options_);
         const auto config_status = kth7111_->config_status();
         status_.spi.kth7111_reg_cal = config_status.reg_cal;
+        status_.spi.kth7111_anlc_en = config_status.anlc_en;
+        status_.spi.kth7111_gaintrim = config_status.gaintrim;
+        status_.spi.kth7111_anlc_status = config_status.anlc_status;
         if (kth7111_->error()) {
           status_.error = aux::AuxError::kSpiConfigError;
         } else {
@@ -529,6 +532,18 @@ class AuxPort {
 
         __enable_irq();
       }
+    }
+    if (kth7111_ && kth7111_->anlc_status_poll_due()) {
+      __disable_irq();
+      if (!kth7111_->PollMillisecond()) {
+        status_.error = aux::AuxError::kSpiConfigError;
+      }
+      const auto config_status = kth7111_->config_status();
+      status_.spi.kth7111_reg_cal = config_status.reg_cal;
+      status_.spi.kth7111_anlc_en = config_status.anlc_en;
+      status_.spi.kth7111_gaintrim = config_status.gaintrim;
+      status_.spi.kth7111_anlc_status = config_status.anlc_status;
+      __enable_irq();
     }
 
     if (ic_pz_) {
@@ -1452,6 +1467,8 @@ class AuxPort {
           if (options.frequency > 10000000) { options.frequency = 10000000; }
           options.timeout = 2000;
           options.reg_cal = config_.spi.kth7111_reg_cal;
+          options.anlc_en = config_.spi.kth7111_anlc_en;
+          options.gaintrim = config_.spi.kth7111_gaintrim;
           kth7111_options_ = options;
           break;
         }

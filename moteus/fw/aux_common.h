@@ -57,7 +57,7 @@ struct Spi {
     uint32_t rate_hz = 12000000;
 
     // The MA732/MA600 use filter_us, bct, and trim.  The KTH7812 uses
-    // trim and gt.  The KTH7111 uses kth7111_reg_cal.
+    // trim and gt.  The KTH7111 uses kth7111_*.
     uint16_t filter_us = 64;
     uint8_t bct = 0;
 
@@ -72,6 +72,8 @@ struct Spi {
     Trim trim = kNone;
     uint8_t gt = 2;
     uint8_t kth7111_reg_cal = 0;
+    uint8_t kth7111_anlc_en = 1;
+    uint8_t kth7111_gaintrim = 0xac;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -82,6 +84,8 @@ struct Spi {
       a->Visit(MJ_NVP(trim));
       a->Visit(MJ_NVP(gt));
       a->Visit(MJ_NVP(kth7111_reg_cal));
+      a->Visit(MJ_NVP(kth7111_anlc_en));
+      a->Visit(MJ_NVP(kth7111_gaintrim));
     }
   };
   struct Status {
@@ -97,6 +101,9 @@ struct Spi {
     Config::Trim trim = Config::kNone;
     uint8_t gt = 0;
     uint8_t kth7111_reg_cal = 0;
+    uint8_t kth7111_anlc_en = 0;
+    uint8_t kth7111_gaintrim = 0;
+    uint8_t kth7111_anlc_status = 0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -110,6 +117,9 @@ struct Spi {
       a->Visit(MJ_NVP(trim));
       a->Visit(MJ_NVP(gt));
       a->Visit(MJ_NVP(kth7111_reg_cal));
+      a->Visit(MJ_NVP(kth7111_anlc_en));
+      a->Visit(MJ_NVP(kth7111_gaintrim));
+      a->Visit(MJ_NVP(kth7111_anlc_status));
     }
   };
 };
