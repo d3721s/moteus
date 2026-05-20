@@ -176,6 +176,15 @@ int main(void) {
   // for millisecond turnover.
   MillisecondTimer timer;
 
+  // We require cycle counting in EnableAdc, including during hardware family
+  // detection below.
+  {
+    ITM->LAR = 0xC5ACCE55;
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+  }
+
   const auto family_and_version = DetectMoteusFamily(&timer);
   g_measured_hw_family = family_and_version.family;
   g_measured_hw_rev = family_and_version.hw_version;
@@ -190,14 +199,6 @@ int main(void) {
   if (family_and_version.hw_version < 0) {
     // This firmware is not compatible with this board.
     mbed_die();
-  }
-
-  // We require cycle counting be enabled for some things.
-  {
-    ITM->LAR = 0xC5ACCE55;
-    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-    DWT->CYCCNT = 0;
-    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
   }
 
   // Turn on our power light.
