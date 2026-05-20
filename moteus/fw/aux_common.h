@@ -83,9 +83,6 @@ struct Spi {
       a->Visit(MJ_NVP(bct));
       a->Visit(MJ_NVP(trim));
       a->Visit(MJ_NVP(gt));
-      a->Visit(MJ_NVP(kth7111_reg_cal));
-      a->Visit(MJ_NVP(kth7111_anlc_en));
-      a->Visit(MJ_NVP(kth7111_gaintrim));
     }
   };
   struct Status {
