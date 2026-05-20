@@ -51,15 +51,15 @@ class MA732 {
     error_ = SetConfig(options);
   }
 
-  uint16_t Sample() MOTEUS_CCM_ATTRIBUTE {
+  uint16_t Sample() {
     return spi_.write(0x0000);
   }
 
-  void StartSample() MOTEUS_CCM_ATTRIBUTE {
+  void StartSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     return spi_.start_write(0x0000);
   }
 
-  uint16_t FinishSample() MOTEUS_CCM_ATTRIBUTE {
+  uint16_t FinishSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     return spi_.finish_write();
   }
 

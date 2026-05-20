@@ -32,15 +32,15 @@ class AS5047 {
       : spi_(options) {
   }
 
-  uint16_t Sample() MOTEUS_CCM_ATTRIBUTE {
+  uint16_t Sample() {
     return (spi_.write(0xffff) & 0x3fff) << 2;
   }
 
-  void StartSample() MOTEUS_CCM_ATTRIBUTE {
+  void StartSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     return spi_.start_write(0xffff);
   }
 
-  uint16_t FinishSample() MOTEUS_CCM_ATTRIBUTE {
+  uint16_t FinishSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     return (spi_.finish_write() & 0x3fff);
   }
 

@@ -48,12 +48,12 @@ class KTH7111 {
     error_ = SetConfig(options);
   }
 
-  uint32_t Sample() MOTEUS_CCM_ATTRIBUTE {
+  uint32_t Sample() {
     StartSample();
     return FinishSample().value;
   }
 
-  void StartSample() MOTEUS_CCM_ATTRIBUTE {
+  void StartSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     cs_.clear();
     FrameDelay();
     sda_.output();
@@ -61,7 +61,7 @@ class KTH7111 {
     sda_.input();
   }
 
-  SampleResult FinishSample() MOTEUS_CCM_ATTRIBUTE {
+  SampleResult FinishSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     const uint8_t angle15_8 = TransferRead();
     const uint8_t angle7_0 = TransferRead();
     const uint8_t crc = TransferRead();
@@ -257,7 +257,7 @@ class KTH7111 {
     cs_.set();
   }
 
-  void TransferWrite(uint8_t value) MOTEUS_CCM_ATTRIBUTE {
+  void TransferWrite(uint8_t value) MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     for (int i = 7; i >= 0; i--) {
       sda_.write((value & (1 << i)) ? 1 : 0);
       sck_.clear();
@@ -267,7 +267,7 @@ class KTH7111 {
     }
   }
 
-  uint8_t TransferRead() MOTEUS_CCM_ATTRIBUTE {
+  uint8_t TransferRead() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     uint8_t result = 0;
     for (int i = 7; i >= 0; i--) {
       sck_.clear();
@@ -290,25 +290,27 @@ class KTH7111 {
     __asm__ volatile("nop");
   }
 
-  static void FrameDelay() MOTEUS_CCM_ATTRIBUTE {
+  static void FrameDelay() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     Delay();
     Delay();
     Delay();
     Delay();
   }
 
-  static uint8_t CalculateCrc(uint8_t value) MOTEUS_CCM_ATTRIBUTE {
+  static uint8_t CalculateCrc(uint8_t value) MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     return UpdateCrc(0x00, value) ^ 0x55;
   }
 
-  static uint8_t CalculateCrc(uint8_t high, uint8_t low) MOTEUS_CCM_ATTRIBUTE {
+  static uint8_t CalculateCrc(uint8_t high, uint8_t low)
+      MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     uint8_t crc = 0x00;
     crc = UpdateCrc(crc, high);
     crc = UpdateCrc(crc, low);
     return crc ^ 0x55;
   }
 
-  static uint8_t UpdateCrc(uint8_t crc, uint8_t value) MOTEUS_CCM_ATTRIBUTE {
+  static uint8_t UpdateCrc(uint8_t crc, uint8_t value)
+      MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     crc ^= value;
     for (int i = 0; i < 8; i++) {
       crc = (crc & 0x80) ? ((crc << 1) ^ 0x07) : (crc << 1);

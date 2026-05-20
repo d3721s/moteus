@@ -63,15 +63,15 @@ class KTH7812 {
     error_ = SetConfig(options);
   }
 
-  uint16_t Sample() MOTEUS_CCM_ATTRIBUTE {
+  uint16_t Sample() {
     return spi_.write(kReadAngle);
   }
 
-  void StartSample() MOTEUS_CCM_ATTRIBUTE {
+  void StartSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     return spi_.start_write(kReadAngle);
   }
 
-  uint16_t FinishSample() MOTEUS_CCM_ATTRIBUTE {
+  uint16_t FinishSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     return spi_.finish_write();
   }
 

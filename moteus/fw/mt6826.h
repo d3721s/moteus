@@ -39,18 +39,18 @@ class MT6826 {
         sck_(options.sck, 1) {
   }
 
-  uint32_t Sample() MOTEUS_CCM_ATTRIBUTE {
+  uint32_t Sample() {
     StartSample();
     return FinishSample().value;
   }
 
-  void StartSample() MOTEUS_CCM_ATTRIBUTE {
+  void StartSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     cs_.clear();
     Delay();
     rx_[0] = Transfer(kBurstReadAngle0);
   }
 
-  SampleResult FinishSample() MOTEUS_CCM_ATTRIBUTE {
+  SampleResult FinishSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     rx_[1] = Transfer(kBurstReadAngle1);
     rx_[2] = Transfer(0x00);
     rx_[3] = Transfer(0x00);
@@ -69,7 +69,7 @@ class MT6826 {
   }
 
  private:
-  uint8_t Transfer(uint8_t value) MOTEUS_CCM_ATTRIBUTE {
+  uint8_t Transfer(uint8_t value) MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     uint8_t result = 0;
     for (int i = 7; i >= 0; i--) {
       mosi_.write((value & (1 << i)) ? 1 : 0);
@@ -89,7 +89,8 @@ class MT6826 {
 
   static uint8_t CalculateCrc(uint8_t angle14_7,
                               uint8_t angle6_0,
-                              uint8_t status) MOTEUS_CCM_ATTRIBUTE {
+                              uint8_t status)
+      MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     uint8_t crc = 0x00;
     crc = UpdateCrc(crc, angle14_7);
     crc = UpdateCrc(crc, angle6_0);
@@ -97,7 +98,8 @@ class MT6826 {
     return crc;
   }
 
-  static uint8_t UpdateCrc(uint8_t crc, uint8_t value) MOTEUS_CCM_ATTRIBUTE {
+  static uint8_t UpdateCrc(uint8_t crc, uint8_t value)
+      MOTEUS_CCM_NOINLINE_ATTRIBUTE {
     crc ^= value;
     for (int i = 0; i < 8; i++) {
       crc = (crc & 0x80) ? ((crc << 1) ^ 0x07) : (crc << 1);

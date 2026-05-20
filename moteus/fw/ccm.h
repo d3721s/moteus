@@ -16,6 +16,9 @@
 
 #if defined(TARGET_STM32G4)
 #define MOTEUS_CCM_ATTRIBUTE __attribute__ ((section (".ccmram")))
+#define MOTEUS_CCM_NOINLINE_ATTRIBUTE \
+  __attribute__ ((section (".ccmram"), noinline))
 #else
 #define MOTEUS_CCM_ATTRIBUTE
+#define MOTEUS_CCM_NOINLINE_ATTRIBUTE
 #endif
