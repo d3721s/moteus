@@ -37,6 +37,7 @@
 #include "fw/cui_amt21.h"
 #include "fw/cui_amt22.h"
 #include "fw/ic_pz.h"
+#include "fw/kth7111.h"
 #include "fw/kth7812.h"
 #include "fw/math.h"
 #include "fw/orbis.h"
@@ -44,6 +45,7 @@
 #include "fw/mbed_util.h"
 #include "fw/millisecond_timer.h"
 #include "fw/moteus_hw.h"
+#include "fw/mt6826.h"
 #include "fw/mt6835.h"
 #include "fw/stm32_i2c.h"
 #include "fw/strtof.h"
@@ -68,6 +70,8 @@ class AuxPort {
     kDefaultOnboardMa600,
     kDefaultOnboardMt6835,
     kDefaultOnboardKth7812,
+    kDefaultOnboardMt6826,
+    kDefaultOnboardKth7111,
   };
 
   enum UartDefault {
@@ -147,8 +151,16 @@ class AuxPort {
           mt6835_->StartSample();
           break;
         }
+        case SampleType::kMt6826: {
+          mt6826_->StartSample();
+          break;
+        }
         case SampleType::kKth7812: {
           kth7812_->StartSample();
+          break;
+        }
+        case SampleType::kKth7111: {
+          kth7111_->StartSample();
           break;
         }
         case SampleType::kIcPz: {
@@ -195,6 +207,18 @@ class AuxPort {
           status_.spi.nonce += 1;
           break;
         }
+        case SampleType::kMt6826: {
+          const auto sample = mt6826_->FinishSample();
+          status_.spi.ic_pz_bits = sample.status;
+          if (!sample.valid) {
+            status_.spi.checksum_errors++;
+            break;
+          }
+          status_.spi.active = true;
+          status_.spi.value = sample.value;
+          status_.spi.nonce += 1;
+          break;
+        }
         case SampleType::kKth7812: {
           status_.spi.active = true;
           status_.spi.value = kth7812_->FinishSample();
@@ -202,6 +226,17 @@ class AuxPort {
               kth7812_->magnetic_field_high();
           status_.spi.magnetic_field_low =
               kth7812_->magnetic_field_low();
+          status_.spi.nonce += 1;
+          break;
+        }
+        case SampleType::kKth7111: {
+          const auto sample = kth7111_->FinishSample();
+          if (!sample.valid) {
+            status_.spi.checksum_errors++;
+            break;
+          }
+          status_.spi.active = true;
+          status_.spi.value = sample.value;
           status_.spi.nonce += 1;
           break;
         }
@@ -443,6 +478,18 @@ class AuxPort {
       }
     }
 
+    if (!mt6826_ && mt6826_options_) {
+      if (timer_->read_ms() > 10) {
+        __disable_irq();
+
+        mt6826_.emplace(*mt6826_options_);
+        AddSampleType(SampleType::kMt6826, true, true);
+        mt6826_->Sample();
+
+        __enable_irq();
+      }
+    }
+
     if (!kth7812_ && kth7812_options_) {
       if (timer_->read_ms() > 10) {
         __disable_irq();
@@ -460,6 +507,24 @@ class AuxPort {
         } else {
           AddSampleType(SampleType::kKth7812, true, true);
           kth7812_->Sample();
+        }
+
+        __enable_irq();
+      }
+    }
+
+    if (!kth7111_ && kth7111_options_) {
+      if (timer_->read_ms() > 10) {
+        __disable_irq();
+
+        kth7111_.emplace(timer_, *kth7111_options_);
+        const auto config_status = kth7111_->config_status();
+        status_.spi.kth7111_reg_cal = config_status.reg_cal;
+        if (kth7111_->error()) {
+          status_.error = aux::AuxError::kSpiConfigError;
+        } else {
+          AddSampleType(SampleType::kKth7111, true, true);
+          kth7111_->Sample();
         }
 
         __enable_irq();
@@ -542,18 +607,20 @@ class AuxPort {
     kIcPz = 3,
     kMt6835 = 4,
     kKth7812 = 5,
+    kMt6826 = 6,
+    kKth7111 = 7,
 
-    kGpio = 6,
-    kHall = 7,
-    kQuad = 8,
-    kIndex = 9,
-    kAksim2 = 10,
-    kCuiAmt21 = 11,
-    kI2c = 12,
-    kCuiAmt22 = 13,
-    kPwmInput = 14,
-    kBissC = 15,
-    kOrbis = 16,
+    kGpio = 8,
+    kHall = 9,
+    kQuad = 10,
+    kIndex = 11,
+    kAksim2 = 12,
+    kCuiAmt21 = 13,
+    kI2c = 14,
+    kCuiAmt22 = 15,
+    kPwmInput = 16,
+    kBissC = 17,
+    kOrbis = 18,
 
     kLastEntry,
   };
@@ -932,8 +999,12 @@ class AuxPort {
     ma732_options_.reset();
     mt6835_.reset();
     mt6835_options_.reset();
+    mt6826_.reset();
+    mt6826_options_.reset();
     kth7812_.reset();
     kth7812_options_.reset();
+    kth7111_.reset();
+    kth7111_options_.reset();
     onboard_cs_.reset();
     cui_amt22_.reset();
     cui_amt22_options_.reset();
@@ -1032,6 +1103,16 @@ class AuxPort {
           config_.spi.mode = aux::Spi::Config::Mode::kOnboardKth7812;
           break;
         }
+        case kDefaultOnboardMt6826: {
+          onboard_spi_available_ = true;
+          config_.spi.mode = aux::Spi::Config::Mode::kOnboardMt6826;
+          break;
+        }
+        case kDefaultOnboardKth7111: {
+          onboard_spi_available_ = true;
+          config_.spi.mode = aux::Spi::Config::Mode::kOnboardKth7111;
+          break;
+        }
       }
     }
 
@@ -1042,6 +1123,15 @@ class AuxPort {
     if (config_.spi.mode == aux::Spi::Config::kOnboardAs5047 &&
         spi_default_ == kDefaultOnboardKth7812) {
       config_.spi.mode = aux::Spi::Config::Mode::kOnboardKth7812;
+    }
+    if (config_.spi.mode == aux::Spi::Config::kOnboardAs5047 &&
+        spi_default_ == kDefaultOnboardMt6826) {
+      config_.spi.mode = aux::Spi::Config::Mode::kOnboardMt6826;
+    }
+    if ((config_.spi.mode == aux::Spi::Config::kOnboardAs5047 ||
+         config_.spi.mode == aux::Spi::Config::kOnboardKth7812) &&
+        spi_default_ == kDefaultOnboardKth7111) {
+      config_.spi.mode = aux::Spi::Config::Mode::kOnboardKth7111;
     }
 
     if (config_.uart.mode == aux::UartEncoder::Config::kBoardDefault) {
@@ -1152,8 +1242,21 @@ class AuxPort {
       return;
     }
 
+    if (config_.spi.mode == aux::Spi::Config::kOnboardMt6826 &&
+        spi_default_ != kDefaultOnboardMt6826) {
+      status_.error = aux::AuxError::kSpiPinError;
+      return;
+    }
+
     if (config_.spi.mode == aux::Spi::Config::kOnboardKth7812 &&
         (spi_default_ != kDefaultOnboardKth7812 ||
+         g_hw_pins.kth7812_cs == NC)) {
+      status_.error = aux::AuxError::kSpiPinError;
+      return;
+    }
+
+    if (config_.spi.mode == aux::Spi::Config::kOnboardKth7111 &&
+        (spi_default_ != kDefaultOnboardKth7111 ||
          g_hw_pins.kth7812_cs == NC)) {
       status_.error = aux::AuxError::kSpiPinError;
       return;
@@ -1163,11 +1266,17 @@ class AuxPort {
         config_.spi.mode == aux::Spi::Config::kOnboardAs5047 ||
         config_.spi.mode == aux::Spi::Config::kOnboardMa600 ||
         config_.spi.mode == aux::Spi::Config::kOnboardMt6835 ||
-        config_.spi.mode == aux::Spi::Config::kOnboardKth7812;
+        config_.spi.mode == aux::Spi::Config::kOnboardMt6826 ||
+        config_.spi.mode == aux::Spi::Config::kOnboardKth7812 ||
+        config_.spi.mode == aux::Spi::Config::kOnboardKth7111;
     const bool using_onboard_mt6835 =
         config_.spi.mode == aux::Spi::Config::kOnboardMt6835;
+    const bool using_onboard_mt6826 =
+        config_.spi.mode == aux::Spi::Config::kOnboardMt6826;
     const bool using_onboard_kth7812 =
         config_.spi.mode == aux::Spi::Config::kOnboardKth7812;
+    const bool using_onboard_kth7111 =
+        config_.spi.mode == aux::Spi::Config::kOnboardKth7111;
 
     if (!using_onboard_spi &&
         onboard_spi_available_) {
@@ -1175,7 +1284,9 @@ class AuxPort {
       // line is not asserted.
       const PinName onboard_cs_pin =
           (spi_default_ == kDefaultOnboardMt6835) ? g_hw_pins.mt6835_cs :
+          (spi_default_ == kDefaultOnboardMt6826) ? g_hw_pins.mt6835_cs :
           (spi_default_ == kDefaultOnboardKth7812) ? g_hw_pins.kth7812_cs :
+          (spi_default_ == kDefaultOnboardKth7111) ? g_hw_pins.kth7812_cs :
           g_hw_pins.as5047_cs;
       if (onboard_cs_pin != NC) {
         onboard_cs_.emplace(onboard_cs_pin, 1);
@@ -1187,7 +1298,7 @@ class AuxPort {
       Stm32Spi::Options spi_options;
       spi_options.frequency = config_.spi.rate_hz;
 
-      if (using_onboard_mt6835) {
+      if (using_onboard_mt6835 || using_onboard_mt6826) {
         spi_options.cs = g_hw_pins.mt6835_cs;
         spi_options.mosi = g_hw_pins.mt6835_mosi;
         spi_options.miso = g_hw_pins.mt6835_miso;
@@ -1200,7 +1311,7 @@ class AuxPort {
           status_.error = aux::AuxError::kSpiPinError;
           return;
         }
-      } else if (using_onboard_kth7812) {
+      } else if (using_onboard_kth7812 || using_onboard_kth7111) {
         spi_options.cs = g_hw_pins.kth7812_cs;
         spi_options.mosi = g_hw_pins.kth7812_mosi;
         spi_options.miso = g_hw_pins.kth7812_miso;
@@ -1308,6 +1419,13 @@ class AuxPort {
           mt6835_options_ = options;
           break;
         }
+        case aux::Spi::Config::kMt6826:
+        case aux::Spi::Config::kOnboardMt6826: {
+          MT6826::Options options = spi_options;
+          options.timeout = 2000;
+          mt6826_options_ = options;
+          break;
+        }
         case aux::Spi::Config::kKth7812:
         case aux::Spi::Config::kOnboardKth7812: {
           KTH7812::Options options = spi_options;
@@ -1326,6 +1444,15 @@ class AuxPort {
             options.mgl = g_hw_pins.kth7812_mgl;
           }
           kth7812_options_ = options;
+          break;
+        }
+        case aux::Spi::Config::kKth7111:
+        case aux::Spi::Config::kOnboardKth7111: {
+          KTH7111::Options options = spi_options;
+          if (options.frequency > 10000000) { options.frequency = 10000000; }
+          options.timeout = 2000;
+          options.reg_cal = config_.spi.kth7111_reg_cal;
+          kth7111_options_ = options;
           break;
         }
         case aux::Spi::Config::kDisabled:
@@ -1706,8 +1833,14 @@ class AuxPort {
   std::optional<MT6835> mt6835_;
   std::optional<MT6835::Options> mt6835_options_;
 
+  std::optional<MT6826> mt6826_;
+  std::optional<MT6826::Options> mt6826_options_;
+
   std::optional<KTH7812> kth7812_;
   std::optional<KTH7812::Options> kth7812_options_;
+
+  std::optional<KTH7111> kth7111_;
+  std::optional<KTH7111::Options> kth7111_options_;
 
   std::optional<CuiAmt22> cui_amt22_;
   std::optional<CuiAmt22::Options> cui_amt22_options_;

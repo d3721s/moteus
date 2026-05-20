@@ -46,6 +46,10 @@ struct Spi {
       kOnboardMt6835,
       kKth7812,
       kOnboardKth7812,
+      kMt6826,
+      kOnboardMt6826,
+      kKth7111,
+      kOnboardKth7111,
 
       kNumModes,
     };
@@ -53,7 +57,7 @@ struct Spi {
     uint32_t rate_hz = 12000000;
 
     // The MA732/MA600 use filter_us, bct, and trim.  The KTH7812 uses
-    // trim and gt.
+    // trim and gt.  The KTH7111 uses kth7111_reg_cal.
     uint16_t filter_us = 64;
     uint8_t bct = 0;
 
@@ -67,6 +71,7 @@ struct Spi {
     };
     Trim trim = kNone;
     uint8_t gt = 2;
+    uint8_t kth7111_reg_cal = 0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -76,6 +81,7 @@ struct Spi {
       a->Visit(MJ_NVP(bct));
       a->Visit(MJ_NVP(trim));
       a->Visit(MJ_NVP(gt));
+      a->Visit(MJ_NVP(kth7111_reg_cal));
     }
   };
   struct Status {
@@ -90,6 +96,7 @@ struct Spi {
     bool magnetic_field_low = false;
     Config::Trim trim = Config::kNone;
     uint8_t gt = 0;
+    uint8_t kth7111_reg_cal = 0;
 
     template <typename Archive>
     void Serialize(Archive* a) {
@@ -102,6 +109,7 @@ struct Spi {
       a->Visit(MJ_NVP(magnetic_field_low));
       a->Visit(MJ_NVP(trim));
       a->Visit(MJ_NVP(gt));
+      a->Visit(MJ_NVP(kth7111_reg_cal));
     }
   };
 };
@@ -576,6 +584,10 @@ struct IsEnum<moteus::aux::Spi::Config::Mode> {
         { M::kOnboardMt6835, "onboard_mt6835" },
         { M::kKth7812, "kth7812" },
         { M::kOnboardKth7812, "onboard_kth7812" },
+        { M::kMt6826, "mt6826" },
+        { M::kOnboardMt6826, "onboard_mt6826" },
+        { M::kKth7111, "kth7111" },
+        { M::kOnboardKth7111, "onboard_kth7111" },
       }};
   }
 };

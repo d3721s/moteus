@@ -568,8 +568,14 @@ class MotorPosition {
           } else if (mode == M::kMt6835 ||
                      mode == M::kOnboardMt6835) {
             source_config.cpr = 2097152;
+          } else if (mode == M::kMt6826 ||
+                     mode == M::kOnboardMt6826) {
+            source_config.cpr = 32768;
           } else if (mode == M::kKth7812 ||
                      mode == M::kOnboardKth7812) {
+            source_config.cpr = 65536;
+          } else if (mode == M::kKth7111 ||
+                     mode == M::kOnboardKth7111) {
             source_config.cpr = 65536;
           } else if (mode == M::kIcPz) {
             source_config.cpr = 16777216;
