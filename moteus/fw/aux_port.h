@@ -1426,8 +1426,6 @@ class AuxPort {
         case aux::Spi::Config::kOnboardMt6826: {
           MT6826::Options options = spi_options;
           options.timeout = 2000;
-          options.rx_dma = dma_channels_[0];
-          options.tx_dma = dma_channels_[1];
           mt6826_options_ = options;
           break;
         }

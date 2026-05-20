@@ -17,6 +17,7 @@
 #include "mbed.h"
 
 #include "fw/ccm.h"
+#include "fw/stm32_digital_output.h"
 #include "fw/stm32_spi.h"
 
 namespace moteus {
@@ -32,26 +33,26 @@ class MT6826 {
   };
 
   MT6826(const Options& options)
-      : spi_([&]() {
-               auto copy = options;
-               copy.mode = 3;
-               copy.width = 8;
-               return copy;
-             }()) {
+      : miso_(options.miso),
+        cs_(options.cs, 1),
+        mosi_(options.mosi, 0),
+        sck_(options.sck, 1) {
   }
 
   void StartSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
-    tx_[0] = kBurstReadAngle0;
-    tx_[1] = kBurstReadAngle1;
-    tx_[2] = 0x00;
-    tx_[3] = 0x00;
-    tx_[4] = 0x00;
-    tx_[5] = 0x00;
-    StartDma(kFrameSize);
+    cs_.clear();
+    Delay();
+    rx_[0] = Transfer(kBurstReadAngle0);
   }
 
   SampleResult FinishSample() MOTEUS_CCM_NOINLINE_ATTRIBUTE {
-    spi_.finish_dma_transfer();
+    rx_[1] = Transfer(kBurstReadAngle1);
+    rx_[2] = Transfer(0x00);
+    rx_[3] = Transfer(0x00);
+    rx_[4] = Transfer(0x00);
+    rx_[5] = Transfer(0x00);
+    Delay();
+    cs_.set();
 
     const uint32_t raw =
         (static_cast<uint32_t>(rx_[2]) << 7) |
@@ -63,10 +64,22 @@ class MT6826 {
   }
 
  private:
-  void StartDma(int size) MOTEUS_CCM_ATTRIBUTE {
-    spi_.start_dma_transfer(
-        std::string_view(reinterpret_cast<const char*>(&tx_[0]), size),
-        mjlib::base::string_span(reinterpret_cast<char*>(&rx_[0]), size));
+  uint8_t Transfer(uint8_t value) MOTEUS_CCM_NOINLINE_ATTRIBUTE {
+    uint8_t result = 0;
+    for (int i = 7; i >= 0; i--) {
+      mosi_.write((value & (1 << i)) ? 1 : 0);
+      sck_.clear();
+      Delay();
+      sck_.set();
+      Delay();
+      result = (result << 1) | (miso_.read() ? 1 : 0);
+    }
+    return result;
+  }
+
+  static void Delay() MOTEUS_CCM_ATTRIBUTE {
+    __asm__ volatile("nop");
+    __asm__ volatile("nop");
   }
 
   static uint8_t CalculateCrc(uint8_t angle14_7,
@@ -91,10 +104,11 @@ class MT6826 {
 
   static constexpr uint8_t kBurstReadAngle0 = 0xa0;
   static constexpr uint8_t kBurstReadAngle1 = 0x03;
-  static constexpr int kFrameSize = 6;
 
-  Stm32Spi spi_;
-  uint8_t tx_[kFrameSize] = {};
+  DigitalIn miso_;
+  Stm32DigitalOutput cs_;
+  Stm32DigitalOutput mosi_;
+  Stm32DigitalOutput sck_;
   uint8_t rx_[6] = {};
 };
 
