@@ -194,12 +194,12 @@ MoteusHwPins FindHardwarePins(FamilyAndVersion);
 //   and servo.max_current_desired_rate.  PI gains are now computed
 //   automatically from the bandwidth and motor parameters.
 //
-// # 0x010f #
+// # 0x010e #
 //
 // * Added KTH7111 gain trim, ANLC enable, and ANLC status values.
 
 #define MOTEUS_MODEL_NUMBER 0x0000
-#define MOTEUS_FIRMWARE_VERSION 0x00010f
+#define MOTEUS_FIRMWARE_VERSION 0x00010e
 
 extern MoteusHwPins g_hw_pins;
 
