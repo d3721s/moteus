@@ -7,6 +7,7 @@
 #include <initializer_list>
 
 class QComboBox;
+class QDoubleSpinBox;
 class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
@@ -64,6 +65,7 @@ private:
 
     bool identifyResolution(QString *error);
     int selectedResolutionBits(QString *error);
+    double softwareReductionRatio() const;
     EncoderData readDataCommand(quint8 command);
     EncoderData parseDataResponse(quint8 command, const QByteArray &response, int resolutionBits);
     bool readEeprom(quint8 address, quint8 *value, bool *busy, QString *error);
@@ -131,6 +133,7 @@ private:
     QPushButton *m_startSamplingButton = nullptr;
     QPushButton *m_stopSamplingButton = nullptr;
     QSpinBox *m_samplingIntervalSpin = nullptr;
+    QDoubleSpinBox *m_reductionRatioSpin = nullptr;
     QLineEdit *m_idStateEdit = nullptr;
     QLineEdit *m_statusEdit = nullptr;
     QLineEdit *m_almcEdit = nullptr;

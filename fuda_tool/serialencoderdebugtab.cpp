@@ -2,6 +2,7 @@
 
 #include <QComboBox>
 #include <QDateTime>
+#include <QDoubleSpinBox>
 #include <QElapsedTimer>
 #include <QFrame>
 #include <QGridLayout>
@@ -290,6 +291,12 @@ QWidget *SerialEncoderDebugTab::createDataGroup()
     m_samplingIntervalSpin = new QSpinBox(group);
     m_samplingIntervalSpin->setRange(0, 2000);
     m_samplingIntervalSpin->setSuffix(QStringLiteral(" ms"));
+    m_reductionRatioSpin = new QDoubleSpinBox(group);
+    m_reductionRatioSpin->setRange(0.001, 1000000.0);
+    m_reductionRatioSpin->setDecimals(6);
+    m_reductionRatioSpin->setSingleStep(0.1);
+    m_reductionRatioSpin->setValue(1.0);
+    m_reductionRatioSpin->setToolTip(QStringLiteral("软件减速比，角度和匀速检测位置会除以该值。"));
 
     m_idStateEdit = new QLineEdit(group);
     m_statusEdit = new QLineEdit(group);
@@ -314,6 +321,8 @@ QWidget *SerialEncoderDebugTab::createDataGroup()
     layout->addWidget(m_readIdButton, 1, 0, 1, 2);
     layout->addWidget(m_readAllButton, 1, 2, 1, 2);
     layout->addWidget(m_readPositionButton, 1, 4, 1, 2);
+    layout->addWidget(new QLabel(QStringLiteral("软件减速比"), group), 1, 6);
+    layout->addWidget(m_reductionRatioSpin, 1, 7);
     layout->addWidget(new QLabel(QStringLiteral("ID / 分辨率"), group), 2, 0);
     layout->addWidget(m_idStateEdit, 2, 1);
     layout->addWidget(new QLabel(QStringLiteral("SF"), group), 2, 2);
@@ -578,6 +587,12 @@ int SerialEncoderDebugTab::selectedResolutionBits(QString *error)
     return m_detectedResolutionBits;
 }
 
+double SerialEncoderDebugTab::softwareReductionRatio() const
+{
+    const double ratio = m_reductionRatioSpin ? m_reductionRatioSpin->value() : 1.0;
+    return ratio > 0.0 ? ratio : 1.0;
+}
+
 SerialEncoderDebugTab::EncoderData SerialEncoderDebugTab::readDataCommand(quint8 command)
 {
     EncoderData data;
@@ -627,7 +642,7 @@ SerialEncoderDebugTab::EncoderData SerialEncoderDebugTab::parseDataResponse(quin
         const quint64 resolution = resolutionValue(data.resolutionBits);
         if (resolution != 0) {
             data.raw &= resolution - 1;
-            data.angleDeg = double(data.raw) * 360.0 / double(resolution);
+            data.angleDeg = double(data.raw) * 360.0 / double(resolution) / softwareReductionRatio();
         }
     };
     auto setTurns = [&](quint64 turns) {
@@ -938,8 +953,10 @@ void SerialEncoderDebugTab::publishMotionSample(const EncoderData &data)
         return;
     }
 
-    const double positionTurns = data.hasTotal ? double(data.totalRaw) / double(resolution)
-                                               : double(data.raw) / double(resolution);
+    const double ratio = softwareReductionRatio();
+    const double encoderPositionTurns = data.hasTotal ? double(data.totalRaw) / double(resolution)
+                                                      : double(data.raw) / double(resolution);
+    const double positionTurns = encoderPositionTurns / ratio;
     const double timestampSec = double(QDateTime::currentMSecsSinceEpoch()) / 1000.0;
     emit encoderPositionSampled(timestampSec, positionTurns, data.angleDeg, data.hasTotal);
 }
