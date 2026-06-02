@@ -5,6 +5,18 @@
 #include <QCanBus>
 #include <QVariant>
 
+namespace
+{
+QString defaultCanPluginName()
+{
+#ifdef Q_OS_WIN
+    return QStringLiteral("peakcan");
+#else
+    return QStringLiteral("socketcan");
+#endif
+}
+} // namespace
+
 CanService::CanService(QObject *parent)
     : QObject(parent)
 {
@@ -24,8 +36,9 @@ void CanService::connectInterface(const QString &interfaceName, int bitrate, int
 {
     clearDevice();
 
+    const QString pluginName = defaultCanPluginName();
     QString error;
-    m_device = QCanBus::instance()->createDevice(QStringLiteral("socketcan"), interfaceName, &error);
+    m_device = QCanBus::instance()->createDevice(pluginName, interfaceName, &error);
     if (!m_device) {
         emit connectionChanged(false, error);
         emit errorOccurred(error);
@@ -33,6 +46,7 @@ void CanService::connectInterface(const QString &interfaceName, int bitrate, int
     }
 
     m_interfaceName = interfaceName;
+    m_pluginName = pluginName;
     m_bitrateSwitchEnabled = dataBitrate > 0 && dataBitrate != bitrate;
 
     if (bitrate > 0) {
@@ -52,7 +66,7 @@ void CanService::connectInterface(const QString &interfaceName, int bitrate, int
     });
     connect(m_device, &QCanBusDevice::stateChanged, this, [this](QCanBusDevice::CanBusDeviceState state) {
         const bool connected = state == QCanBusDevice::ConnectedState;
-        emit connectionChanged(connected, connected ? QStringLiteral("已连接 %1").arg(m_interfaceName)
+        emit connectionChanged(connected, connected ? QStringLiteral("已连接 %1 (%2)").arg(m_interfaceName, m_pluginName)
                                                    : QStringLiteral("未连接"));
     });
 
@@ -64,7 +78,7 @@ void CanService::connectInterface(const QString &interfaceName, int bitrate, int
         return;
     }
 
-    emit connectionChanged(true, QStringLiteral("已连接 %1").arg(interfaceName));
+    emit connectionChanged(true, QStringLiteral("已连接 %1 (%2)").arg(interfaceName, pluginName));
 }
 
 void CanService::disconnectInterface()
@@ -110,6 +124,7 @@ void CanService::clearDevice()
     }
     delete m_device;
     m_device = nullptr;
+    m_pluginName.clear();
     m_bitrateSwitchEnabled = false;
 }
 

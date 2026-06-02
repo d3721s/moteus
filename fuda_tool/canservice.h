@@ -33,6 +33,7 @@ private:
 
     QCanBusDevice *m_device = nullptr;
     QString m_interfaceName;
+    QString m_pluginName;
     bool m_bitrateSwitchEnabled = false;
 };
 

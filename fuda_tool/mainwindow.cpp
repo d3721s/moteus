@@ -315,7 +315,13 @@ QWidget *MainWindow::createConnectionPanel()
     layout->setHorizontalSpacing(8);
     layout->setVerticalSpacing(0);
 
-    m_interfaceEdit = new QLineEdit(QStringLiteral("can0"), box);
+    m_interfaceEdit = new QLineEdit(
+#ifdef Q_OS_WIN
+        QStringLiteral("usb0"),
+#else
+        QStringLiteral("can0"),
+#endif
+        box);
     m_interfaceEdit->setMinimumWidth(110);
 
     m_nodeSpin = new QSpinBox(box);
