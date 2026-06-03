@@ -28,7 +28,7 @@ class KTH7812 {
  public:
   static constexpr uint8_t kTrimNone = 0x00;
   static constexpr uint8_t kTrimX = 0x01;
-  static constexpr uint8_t kTrimY = 0x80;
+  static constexpr uint8_t kTrimY = 0x02;
   static constexpr uint8_t kTrimMask = kTrimX | kTrimY;
 
   struct Options : public Stm32Spi::Options {
