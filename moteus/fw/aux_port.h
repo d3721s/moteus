@@ -454,6 +454,7 @@ class AuxPort {
             (config_status.trim == KTH7812::kTrimX) ? T::kTrimX :
             (config_status.trim == KTH7812::kTrimY) ? T::kTrimY :
             T::kNone;
+        
         status_.spi.gt = config_status.gt;
         if (kth7812_->error()) {
           status_.error = aux::AuxError::kSpiConfigError;
@@ -1321,6 +1322,7 @@ class AuxPort {
               (config_.spi.trim == T::kTrimX) ? KTH7812::kTrimX :
               (config_.spi.trim == T::kTrimY) ? KTH7812::kTrimY :
               KTH7812::kTrimNone;
+          options.trim = KTH7812::kTrimY;
           if (config_.spi.mode == aux::Spi::Config::kOnboardKth7812) {
             options.mgh = g_hw_pins.kth7812_mgh;
             options.mgl = g_hw_pins.kth7812_mgl;

@@ -155,7 +155,7 @@ class MotorPosition {
 
     // If a gear reducer is between the rotor and the output, this
     // should be less than 1.0f, otherwise greater.
-    float rotor_to_output_ratio = 1.0f;
+    float rotor_to_output_ratio = 1.0f / 25.0f;
 
     // Set if you want to enable ratios greater than 1.0, which should
     // be extremely rare as most motors use a reducer.
