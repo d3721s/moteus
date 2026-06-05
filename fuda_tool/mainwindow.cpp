@@ -1388,7 +1388,7 @@ void MainWindow::startOneClickCalibration()
         return;
     }
 
-    const QString command = QStringLiteral("MOTEUS_CAL_DIR=/tmp python3 -u -m moteus.moteus_tool --calibrate --target %1 --cal-never-encoder-current-mode").arg(currentNodeId());
+    const QString command = QStringLiteral("env MOTEUS_CAL_DIR=/tmp python3 -u -m moteus.moteus_tool --calibrate --target %1 --cal-never-encoder-current-mode").arg(currentNodeId());
     startProcessPanel(&m_calibrationProcess, command);
 }
 
