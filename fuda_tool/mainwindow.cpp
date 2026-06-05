@@ -12,6 +12,7 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QDateTime>
 #include <QDialog>
 #include <QDoubleSpinBox>
@@ -315,14 +316,13 @@ QWidget *MainWindow::createConnectionPanel()
     layout->setHorizontalSpacing(8);
     layout->setVerticalSpacing(0);
 
-    m_interfaceEdit = new QLineEdit(
+    m_interfaceCombo = new QComboBox(box);
 #ifdef Q_OS_WIN
-        QStringLiteral("usb0"),
+    m_interfaceCombo->addItems({QStringLiteral("can1"), QStringLiteral("can2")});
 #else
-        QStringLiteral("can0"),
+    m_interfaceCombo->addItems({QStringLiteral("can0"), QStringLiteral("can1")});
 #endif
-        box);
-    m_interfaceEdit->setMinimumWidth(110);
+    m_interfaceCombo->setMinimumWidth(110);
 
     m_nodeSpin = new QSpinBox(box);
     m_nodeSpin->setRange(1, CanIdCodec::BroadcastNodeId);
@@ -341,6 +341,9 @@ QWidget *MainWindow::createConnectionPanel()
     m_dataBitrateSpin->setValue(2000000);
     m_dataBitrateSpin->setSuffix(QStringLiteral(" bit/s"));
 
+    m_bitrateSwitchCheck = new QCheckBox(QStringLiteral("BRS"), box);
+    m_bitrateSwitchCheck->setChecked(true);
+
     auto *connectButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogApplyButton), QStringLiteral("连接"), box);
     auto *disconnectButton = new QPushButton(style()->standardIcon(QStyle::SP_DialogCancelButton), QStringLiteral("断开"), box);
     auto *spiDebugButton = new QPushButton(QStringLiteral("进入SPI调试"), box);
@@ -353,29 +356,31 @@ QWidget *MainWindow::createConnectionPanel()
 
     layout->addWidget(titleLabel, 0, 0);
     layout->addWidget(new QLabel(QStringLiteral("设备"), box), 0, 1);
-    layout->addWidget(m_interfaceEdit, 0, 2);
+    layout->addWidget(m_interfaceCombo, 0, 2);
     layout->addWidget(new QLabel(QStringLiteral("节点 ID"), box), 0, 3);
     layout->addWidget(m_nodeSpin, 0, 4);
     layout->addWidget(new QLabel(QStringLiteral("仲裁波特率"), box), 0, 5);
     layout->addWidget(m_bitrateSpin, 0, 6);
     layout->addWidget(new QLabel(QStringLiteral("数据波特率"), box), 0, 7);
     layout->addWidget(m_dataBitrateSpin, 0, 8);
-    layout->addWidget(connectButton, 0, 9);
-    layout->addWidget(disconnectButton, 0, 10);
-    layout->addWidget(spiDebugButton, 0, 11);
-    layout->addWidget(serialEncoderDebugButton, 0, 12);
-    layout->addWidget(m_connectionStateLabel, 0, 13);
-    layout->setColumnStretch(13, 1);
+    layout->addWidget(m_bitrateSwitchCheck, 0, 9);
+    layout->addWidget(connectButton, 0, 10);
+    layout->addWidget(disconnectButton, 0, 11);
+    layout->addWidget(spiDebugButton, 0, 12);
+    layout->addWidget(serialEncoderDebugButton, 0, 13);
+    layout->addWidget(m_connectionStateLabel, 0, 14);
+    layout->setColumnStretch(14, 1);
 
     connect(connectButton, &QPushButton::clicked, this, [this]() {
-        const QString interfaceName = m_interfaceEdit->text().trimmed();
+        const QString interfaceName = m_interfaceCombo->currentText().trimmed();
         if (interfaceName.isEmpty()) {
             QMessageBox::warning(this, QStringLiteral("参数错误"), QStringLiteral("设备名不能为空"));
             return;
         }
         emit connectCanInterfaceRequested(interfaceName,
                                           m_bitrateSpin->value(),
-                                          m_dataBitrateSpin->value());
+                                          m_dataBitrateSpin->value(),
+                                          m_bitrateSwitchCheck && m_bitrateSwitchCheck->isChecked());
     });
     connect(disconnectButton, &QPushButton::clicked, this, &MainWindow::disconnectCanInterfaceRequested);
     connect(spiDebugButton, &QPushButton::clicked, this, &MainWindow::showSpiDebugDialog);
@@ -1048,7 +1053,7 @@ void MainWindow::applyVisualStyle()
         QSplitter::handle:vertical {
             height: 5px;
         }
-        QLineEdit, QSpinBox, QDoubleSpinBox {
+        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
             min-height: 24px;
             border: 1px solid #8A8A8A;
             border-radius: 0;
@@ -1056,7 +1061,7 @@ void MainWindow::applyVisualStyle()
             background: #FFFFFF;
             selection-background-color: #0A64AD;
         }
-        QLineEdit:disabled {
+        QLineEdit:disabled, QComboBox:disabled {
             color: #707070;
             background: #E2E2E2;
         }

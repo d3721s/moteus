@@ -13,6 +13,7 @@ class CalibrationRunner;
 class CanService;
 class QCheckBox;
 class QCloseEvent;
+class QComboBox;
 class QDialog;
 class QDoubleSpinBox;
 class QLabel;
@@ -36,7 +37,7 @@ public:
     ~MainWindow() override;
 
 signals:
-    void connectCanInterfaceRequested(const QString &interfaceName, int bitrate, int dataBitrate);
+    void connectCanInterfaceRequested(const QString &interfaceName, int bitrate, int dataBitrate, bool bitrateSwitchEnabled);
     void disconnectCanInterfaceRequested();
     void sendCanCommandRequested(quint8 nodeId, quint8 commandId, const QByteArray &payload);
 
@@ -123,10 +124,11 @@ private:
     QPointer<SerialEncoderDebugTab> m_serialEncoderDebugTab;
     QPointer<UniformMotionWindow> m_uniformMotionWindow;
 
-    QLineEdit *m_interfaceEdit = nullptr;
+    QComboBox *m_interfaceCombo = nullptr;
     QSpinBox *m_nodeSpin = nullptr;
     QSpinBox *m_bitrateSpin = nullptr;
     QSpinBox *m_dataBitrateSpin = nullptr;
+    QCheckBox *m_bitrateSwitchCheck = nullptr;
     QLabel *m_connectionStateLabel = nullptr;
 
     QTableWidget *m_commandTable = nullptr;

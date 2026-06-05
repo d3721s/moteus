@@ -2,8 +2,14 @@
 #define CANSERVICE_H
 
 #include <QObject>
-#include <QCanBusDevice>
 #include <QCanBusFrame>
+#include <QtGlobal>
+
+#ifdef Q_OS_WIN
+#include <QTimer>
+#else
+#include <QCanBusDevice>
+#endif
 
 class CanService : public QObject
 {
@@ -14,7 +20,7 @@ public:
     ~CanService() override;
 
 public slots:
-    void connectInterface(const QString &interfaceName, int bitrate, int dataBitrate);
+    void connectInterface(const QString &interfaceName, int bitrate, int dataBitrate, bool bitrateSwitchEnabled);
     void disconnectInterface();
     void sendCommand(quint8 nodeId, quint8 commandId, const QByteArray &payload);
 
@@ -31,7 +37,15 @@ private:
     void clearDevice();
     void processReceivedFrames();
 
+#ifdef Q_OS_WIN
+    QTimer *m_receiveTimer = nullptr;
+    void *m_deviceHandle = nullptr;
+    void *m_channelHandle = nullptr;
+    unsigned int m_deviceIndex = 0;
+    unsigned int m_canIndex = 0;
+#else
     QCanBusDevice *m_device = nullptr;
+#endif
     QString m_interfaceName;
     QString m_pluginName;
     bool m_bitrateSwitchEnabled = false;
