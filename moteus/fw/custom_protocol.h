@@ -20,7 +20,8 @@
 #include "mjlib/micro/command_manager.h"
 #include "mjlib/multiplex/micro_server.h"
 // using mjlib::micro::CommandManager;
-
+#define FUDA_FIRMWARE_VERSION_MAJOR 3
+#define FUDA_FIRMWARE_VERSION_MINOR 2
 namespace moteus {
 
 class CustomProtocol {
@@ -1258,10 +1259,15 @@ private:
 
   bool HandleGetFwVersion(int dlc, const char *data) {
     char reply[8] = {0};
-    reply[4] = MOTEUS_FIRMWARE_VERSION & 0xFF;
-    reply[5] = (MOTEUS_FIRMWARE_VERSION >> 8) & 0xFF;
-    reply[6] = (MOTEUS_FIRMWARE_VERSION >> 16) & 0xFF;
-    reply[7] = (MOTEUS_FIRMWARE_VERSION >> 24) & 0xFF;
+    reply[4] = FUDA_FIRMWARE_VERSION_MINOR & 0xFF;
+    reply[5] = (FUDA_FIRMWARE_VERSION_MINOR >> 8) & 0xFF;
+    reply[6] = (FUDA_FIRMWARE_VERSION_MINOR >> 16) & 0xFF;
+    reply[7] = (FUDA_FIRMWARE_VERSION_MINOR >> 24) & 0xFF;
+
+    reply[0] = FUDA_FIRMWARE_VERSION_MAJOR & 0xFF;
+    reply[1] = (FUDA_FIRMWARE_VERSION_MAJOR >> 8) & 0xFF;
+    reply[2] = (FUDA_FIRMWARE_VERSION_MAJOR >> 16) & 0xFF;
+    reply[3] = (FUDA_FIRMWARE_VERSION_MAJOR >> 24) & 0xFF;
 
     SendFrame(Send << DirOffset |
                   (multiplex_protocol_->config()->id << NodeOffset) |
